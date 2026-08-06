@@ -1,0 +1,32 @@
+services:
+  dashboard:
+    image: ghcr.io/gethomepage/homepage:latest
+    restart: unless-stopped
+
+    env_file:
+      - ../../.env
+
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+      HOMEPAGE_ALLOWED_HOSTS: ${HOMEPAGE_ALLOWED_HOSTS}
+
+    ports:
+      - "${HOMEPAGE_PORT}:3000"
+
+    volumes:
+      - ${APP_ROOT}/config/homepage:/app/config
+      - ${DATA_ROOT}/homepage:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+    labels:
+      io.homelab-sentinel.module: "dashboard"
+      io.homelab-sentinel.category: "core"
+
+    networks:
+      - homelab-network
+
+networks:
+  homelab-network:
+    external: true

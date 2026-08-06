@@ -1,0 +1,62 @@
+# Environment
+.env
+
+# Logs
+logs/
+*.log
+
+# Temporary
+tmp/
+temp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+
+# Docker
+*.pid
+
+# Local data
+srv/
+data/
+
+# Backups
+backups/
+
+# HomeLab Sentinel local environment
+.env
+
+# Logs
+*.log
+logs/
+
+# Runtime data
+data/
+srv/
+
+# Backups
+backups/
+
+# Temporary files
+tmp/
+temp/
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# Operating systems
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
