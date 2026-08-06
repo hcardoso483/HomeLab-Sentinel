@@ -119,3 +119,14 @@ the user should never have to configure it manually.
 Automatic discovery is the foundation of the platform.
 
 Everything else builds upon the discovered inventory.
+
+
+| Module                      | Technology    |    Status   |
+| --------------------------- | ------------- | :---------: |
+| Dashboard Module            | Homepage      | ✅ Complete |
+| Metrics Module              | Prometheus    |  ⏳ Planned |
+| Host Monitoring Module      | Node Exporter |  ⏳ Planned |
+| Container Monitoring Module | cAdvisor      |  ⏳ Planned |
+| Visualization Module        | Grafana       |  ⏳ Planned |
+| Discovery Module            | Custom        |  ⏳ Planned |
+| Sentinel Engine             | Custom        |  ⏳ Planned |
