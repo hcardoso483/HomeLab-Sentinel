@@ -120,6 +120,7 @@ Automatic discovery is the foundation of the platform.
 
 Everything else builds upon the discovered inventory.
 
+No component shall rely on hard-coded filesystem paths to locate modules. Module discovery must occur through the Registry.
 
 | Module                      | Technology    |    Status   |
 | --------------------------- | ------------- | :---------: |

@@ -1,0 +1,49 @@
+id: prometheus
+
+name: Prometheus
+
+display_name: Prometheus Metrics
+
+version: 0.1.0
+
+category: monitoring
+
+description: Time-series metrics collection and storage engine.
+
+author: HomeLab Sentinel
+
+license: Apache-2.0
+
+status: enabled
+
+homepage: https://prometheus.io/
+
+documentation: docs.md
+
+compose: compose.yml
+
+healthcheck: scripts/healthcheck.sh
+
+install: scripts/install.sh
+
+update: scripts/update.sh
+
+uninstall: scripts/uninstall.sh
+
+dependencies:
+  - docker
+
+capabilities:
+  - metrics
+  - monitoring
+
+ports:
+  - 9090
+
+volumes:
+  - prometheus-data
+
+tags:
+  - monitoring
+  - metrics
+  - observability
