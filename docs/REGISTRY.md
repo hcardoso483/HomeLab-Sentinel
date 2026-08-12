@@ -47,3 +47,29 @@ Registry
    │
    ▼
 Indexed module information
+
+# Diagnostics and Suggestions
+
+The Registry should provide actionable diagnostics when module validation fails.
+
+Errors should explain:
+
+- What failed.
+- Which module is affected.
+- Which file or component caused the problem.
+- Where appropriate, how the problem can be corrected.
+
+The preferred diagnostic structure is:
+
+```text
+[ERROR] What went wrong
+[DETAIL] Relevant context
+[SUGGESTION] Recommended corrective action
+
+
+Example
+
+[ERROR] Module metadata is invalid.
+[DETAIL] Module: prometheus
+[DETAIL] Missing required field: version
+[SUGGESTION] Add a version field to metadata.yml.

@@ -1,0 +1,17 @@
+id: homepage
+name: Homepage
+version: "1.0.0"
+category: core
+description: HomeLab Sentinel dashboard and unified infrastructure interface.
+
+status: stable
+
+dependencies:
+  - docker
+
+capabilities:
+  - dashboard
+  - docker-integration
+  - service-overview
+
+healthcheck: scripts/healthcheck.sh
