@@ -1,169 +1,767 @@
 # HomeLab Sentinel Module Specification
 
-**Version:** 1.0 (Draft)
+**Specification Version:** 1.0
+**Status:** Approved
 
 ---
 
-# Purpose
+# Overview
 
-This document defines the standard that every HomeLab Sentinel module must follow.
+A HomeLab Sentinel module is a self-contained component that provides a specific capability to the HomeLab Sentinel platform.
 
-The objective is to ensure consistency across the platform, simplify maintenance, improve troubleshooting, and allow the Sentinel Core and Deployment Engine to manage all modules through a common interface.
+Modules are designed to be:
 
-If a component does not follow this specification, it is **not considered a HomeLab Sentinel module**.
+- Discoverable
+- Deployable
+- Maintainable
+- Testable
+- Replaceable
+- Independently documented
 
----
+The module system is the foundation of the HomeLab Sentinel modular architecture.
 
-# Design Goals
-
-Every module must be:
-
-* Self-contained
-* Independently installable
-* Independently removable
-* Independently testable
-* Independently updateable
-* Independently documented
-
-Modules should never depend on implementation details of other modules.
+The core platform should interact with modules through well-defined contracts rather than module-specific implementation logic.
 
 ---
 
-# Standard Directory Layout
+# Design Principles
 
-Every module must follow the same structure.
+Every module MUST be:
+
+- Self-describing
+- Independently identifiable
+- Independently testable
+- Independently maintainable
+- Independently documented
+- Discoverable by the Registry
+- Deployable through the Deployment Engine
+
+Modules should not require core platform code to contain module-specific implementation logic.
+
+---
+
+# Module Architecture
+
+Every module follows a common structure.
+
+Example:
 
 ```text
-module-name/
-├── metadata.yml
-├── compose.yml
-├── docs.md
-├── config/
-├── scripts/
-│   ├── install.sh
-│   ├── update.sh
-│   ├── uninstall.sh
-│   └── healthcheck.sh
-└── assets/
-```
+compose/
+└── monitoring/
+    └── prometheus/
+        ├── compose.yml
+        ├── metadata.yml
+        ├── docs.md
+        ├── config/
+        │   └── prometheus.yml
+        ├── assets/
+        └── scripts/
+            ├── install.sh
+            ├── update.sh
+            ├── uninstall.sh
+            └── healthcheck.sh
 
----
+Not every module requires every directory or file.
 
-# Required Files
+The required elements are defined below.
 
-## metadata.yml
+Module Identity
 
-Defines the module identity and capabilities.
+Every module MUST have a unique id.
 
-Required fields include:
+Example:
 
-* id
-* name
-* version
-* category
-* description
-* author
-* license
-* dependencies
-* capabilities
-* ports
-* volumes
-* status
-
----
-
-## compose.yml
-
-Defines how the module is deployed.
-
-Modules that do not require containers may omit this file.
-
----
-
-## docs.md
-
-Explains:
-
-* Purpose
-* Configuration
-* Ports
-* Dependencies
-* Troubleshooting
-* Upgrade notes
-
----
-
-## config/
-
-Contains configuration files used by the module.
-
-The installer may generate or modify these files during deployment.
-
----
-
-## scripts/
-
-Contains lifecycle scripts.
-
-### install.sh
-
-Installs or prepares the module.
-
----
-
-### update.sh
-
-Safely updates the module.
-
----
-
-### uninstall.sh
-
-Removes the module while preserving data unless explicitly instructed otherwise.
-
----
-
-### healthcheck.sh
-
-Returns the operational state of the module.
-
-Possible results:
-
-* Healthy
-* Warning
-* Critical
-
----
-
-## assets/
-
-Optional directory containing:
-
-* Icons
-* Dashboards
-* Templates
-* Static resources
-
----
-
-# Metadata Standard
-
-Every module must provide a metadata file similar to:
-
-```yaml
 id: prometheus
 
-name: Prometheus
+The module ID:
 
-version: 0.1.0
+Must be unique.
+Must be stable.
+Must not change between installations.
+Is used by the Registry.
+Is used by the Deployment Engine.
+Is used by automation and scripts.
+
+Recommended format:
+
+lowercase
+lowercase-with-hyphens
+
+Examples:
+
+prometheus
+node-exporter
+home-assistant
+docker-monitor
+Metadata
+
+Every module MUST contain:
+
+metadata.yml
+
+The metadata file is the authoritative definition of the module.
+
+The Registry indexes module metadata.
+
+The Deployment Engine consumes module metadata.
+
+Other Sentinel components may consume metadata where appropriate.
+
+## Specification Version
+
+Every module SHOULD declare the version of the HomeLab Sentinel Module Specification it was written against.
+
+Example:
+
+spec_version: "1.0"
+
+The specification version is independent from the module's own version.
+
+This allows the Registry and Deployment Engine to identify compatibility requirements when the specification evolves.
+
+Required Metadata
+
+The following fields are required:
+
+id:
+name:
+version:
+category:
+description:
+status:
+
+Example:
+
+id: prometheus
+name: Prometheus
+version: "0.1.0"
+category: monitoring
+description: Time-series metrics collection and storage engine.
+status: enabled
+Optional Metadata
+
+Modules MAY provide additional metadata.
+
+Supported fields include:
+
+spec_version:
+display_name:
+author:
+license:
+homepage:
+documentation:
+compose:
+healthcheck:
+install:
+update:
+uninstall:
+dependencies:
+capabilities:
+ports:
+volumes:
+tags:
+
+Modules do not need to declare optional fields that do not apply to them.
+
+Metadata Field Definitions
+id
+
+Unique machine-readable module identifier.
+
+Required.
+
+name
+
+Human-readable module name.
+
+Required.
+
+display_name
+
+Optional user-facing name.
+
+Useful when the technical module name differs from the name displayed in the dashboard.
+
+version
+
+Module version.
+
+Required.
+
+The version identifies the module definition and deployment package.
+
+Semantic versioning is recommended.
+
+Example:
+
+0.1.0
+1.0.0
+2.1.3
+category
+
+Defines the module's functional category.
+
+Required.
+
+Initial categories:
+
+core
+monitoring
+discovery
+infrastructure
+logging
+optional
+
+Additional categories may be introduced in future versions.
+
+description
+
+Short description of the module.
+
+Required.
+
+The description should explain the module's primary purpose.
+
+status
+
+Defines the module's availability state.
+
+Required.
+
+Supported values are:
+
+enabled
+disabled
+experimental
+deprecated
+
+Module definition status and runtime health are separate concepts.
+
+author
+
+Optional module author or organization.
+
+license
+
+Software license associated with the module.
+
+homepage
+
+Official project homepage.
+
+documentation
+
+Path to module documentation.
+
+Example:
+
+documentation: docs.md
+compose
+
+Path to the Docker Compose definition.
+
+Example:
+
+compose: compose.yml
+
+A module using Docker Compose should declare its Compose definition here.
+
+healthcheck
+
+Path to the module healthcheck script.
+
+Example:
+
+healthcheck: scripts/healthcheck.sh
+
+A module that represents a continuously running service SHOULD provide a healthcheck.
+
+Modules that do not represent a continuously running service MAY omit a healthcheck.
+
+When a healthcheck is declared, the Registry and Deployment Engine should validate that the referenced file exists.
+
+A healthcheck should verify actual service availability whenever practical.
+
+The expected result is:
+
+0 = healthy
+non-zero = unhealthy
+install
+
+Optional module-specific installation script.
+
+Example:
+
+install: scripts/install.sh
+
+The primary installation mechanism remains the HomeLab Sentinel Deployment Engine.
+
+Module-specific scripts should only contain logic that cannot reasonably be handled by the core Deployment Engine.
+
+update
+
+Optional module-specific update script.
+
+Example:
+
+update: scripts/update.sh
+uninstall
+
+Optional module-specific uninstall script.
+
+Example:
+
+uninstall: scripts/uninstall.sh
+
+Uninstall procedures must take persistent data into consideration.
+
+Removing a module should not automatically destroy user data unless explicitly intended and documented.
+
+Dependencies
+
+Modules MAY declare dependencies.
+
+Example:
+
+dependencies:
+  - docker
+
+Dependencies are validated before deployment.
+
+The Deployment Engine is responsible for dependency validation.
+
+Circular dependencies are not permitted.
+
+The Deployment Engine must detect dependency cycles before deployment and report them as validation errors.
+
+Initial dependency types may include:
+
+docker
+network
+storage
+database
+module
+host-capability
+
+Dependency definitions should remain declarative.
+
+Capabilities
+
+Modules MAY declare capabilities.
+
+Example:
+
+capabilities:
+  - metrics
+  - monitoring
+
+Capabilities describe what the module provides to the HomeLab Sentinel ecosystem.
+
+Examples include:
+
+dashboard
+metrics
+monitoring
+discovery
+logging
+alerting
+storage
+automation
+
+Capabilities are informational and may later be used for automatic integration.
+
+Ports
+
+Modules MAY declare network ports.
+
+Example:
+
+ports:
+  - 9090
+
+Ports describe ports exposed or required by the module.
+
+The Compose configuration remains authoritative for actual container networking.
+
+Volumes
+
+Modules MAY declare persistent volumes.
+
+Example:
+
+volumes:
+  - prometheus-data
+
+The metadata declaration documents persistent storage requirements.
+
+The actual Docker volume or bind-mount configuration remains defined by the Compose configuration.
+
+Tags
+
+Modules MAY provide tags.
+
+Example:
+
+tags:
+  - monitoring
+  - metrics
+  - observability
+
+Tags provide additional classification and search capabilities.
+
+Module Compose Definition
+
+A module using Docker MUST provide a Compose definition when Docker Compose is required for deployment.
+
+Recommended filename:
+
+compose.yml
+
+Example:
+
+prometheus/
+└── compose.yml
+
+The Compose definition should be self-contained within the module where practical.
+
+External configuration may be referenced when required by the HomeLab Sentinel architecture.
+
+Configuration
+
+Persistent configuration should normally be stored outside the module definition when appropriate.
+
+Example:
+
+app/
+├── compose/
+│   └── monitoring/
+│       └── prometheus/
+│           └── compose.yml
+│
+└── config/
+    └── prometheus/
+        └── prometheus.yml
+
+This separates:
+
+Module definition
+
+from:
+
+User configuration
+
+Module upgrades should therefore not overwrite user configuration.
+
+Persistent Data
+
+Persistent application data should be stored outside the module definition whenever practical.
+
+Example:
+
+/srv/homelab-sentinel/
+
+or the appropriate configured data root.
+
+Modules must clearly document persistent data requirements.
+
+Lifecycle
+
+The HomeLab Sentinel module lifecycle is:
+
+Available
+   │
+   ▼
+Installed
+   │
+   ▼
+Running
+   │
+   ├── Update
+   │
+   ├── Healthcheck
+   │
+   └── Uninstall
+
+Possible runtime states include:
+
+available
+installed
+running
+stopped
+unhealthy
+failed
+updating
+removing
+
+Module definition status and runtime status are separate concepts.
+
+Registry Integration
+
+The Module Registry discovers modules by locating valid metadata.yml files.
+
+The relationship is:
+
+Module
+   │
+   └── metadata.yml
+          │
+          ▼
+       Registry
+          │
+          ▼
+    Module information
+
+The Registry MUST NOT require module-specific hardcoded logic.
+
+Adding a new compliant module should be sufficient for the Registry to discover it automatically.
+
+The Registry is responsible for:
+
+Discovering modules
+Reading metadata
+Identifying modules
+Validating metadata
+Reporting compliance
+Providing module information to other Sentinel components
+Deployment Engine Integration
+
+The Deployment Engine uses Registry information to locate and manage modules.
+
+Target architecture:
+
+User
+ │
+ ▼
+Deployment Engine
+ │
+ ▼
+Registry
+ │
+ ▼
+Module metadata
+ │
+ ├── dependencies
+ ├── compose
+ ├── healthcheck
+ └── lifecycle scripts
+ │
+ ▼
+Module deployment
+
+The Deployment Engine should not contain module-specific installation logic whenever possible.
+
+The Deployment Engine is responsible for:
+
+Dependency validation
+Module deployment
+Module startup
+Module health verification
+Module updates
+Module removal
+Reporting deployment results
+Validation
+
+Module metadata MUST be validated before deployment.
+
+Validation should check:
+
+Valid YAML
+Required fields
+Valid module ID
+Unique module ID
+Valid category
+Valid status
+Referenced files
+Dependencies
+Compose configuration where applicable
+Healthcheck availability where declared
+
+Invalid modules must not be deployed automatically.
+
+Compliance Levels
+
+A module is evaluated against the HomeLab Sentinel Module Specification.
+
+The Registry may classify a module using the following compliance levels.
+
+Compliant
+
+The module contains all required metadata fields and satisfies the structural requirements defined by this specification.
+
+A compliant module may proceed through the normal deployment process.
+
+Partially Compliant
+
+The module satisfies all required fields and can potentially be deployed, but is missing optional metadata or recommended components.
+
+The Registry should report missing optional information as a warning rather than treating it as a fatal error.
+
+Example:
+
+[WARNING] Module is partially compliant.
+[DETAIL] Module: homepage
+[DETAIL] Optional field missing: documentation
+[SUGGESTION] Add documentation: docs.md to metadata.yml.
+Non-Compliant
+
+The module does not satisfy the required specification.
+
+Examples include:
+
+Missing metadata.yml
+Invalid YAML
+Missing required metadata fields
+Invalid module ID
+Invalid category
+Invalid status
+Referenced lifecycle files that do not exist
+
+A non-compliant module must not be deployed automatically.
+
+Example:
+
+[ERROR] Module is non-compliant.
+[DETAIL] Module: example
+[DETAIL] Missing required field: version
+[SUGGESTION] Add a version field to metadata.yml.
+
+Compliance status should be determined by validation rather than manually declared by the module.
+
+The Registry is responsible for module specification validation.
+
+Diagnostics
+
+Validation and deployment errors should provide actionable information.
+
+Preferred format:
+
+[ERROR] What went wrong
+[DETAIL] Relevant context
+[SUGGESTION] Recommended corrective action
+
+Example:
+
+[ERROR] Module metadata is invalid.
+[DETAIL] Module: prometheus
+[DETAIL] Missing required field: version
+[SUGGESTION] Add a version field to metadata.yml.
+
+Diagnostics should help both experienced administrators and beginners.
+
+Future versions may introduce diagnostic codes and links to relevant documentation.
+
+Security
+
+Modules must not assume unrestricted host access.
+
+Module definitions should request only the permissions required for their function.
+
+Future module systems may include:
+
+Signature verification
+Trusted repositories
+Dependency verification
+Version integrity checks
+Supply-chain protection
+Versioning
+
+The module specification itself is versioned independently from individual modules.
+
+Current Specification Version: 1.0
+
+Changes to the specification must consider backward compatibility.
+
+A module should declare its own version independently.
+
+Example:
+
+version: "0.1.0"
+
+Modules MAY also declare the specification version they were written against:
+
+spec_version: "1.0"
+
+Future specification versions may introduce new required fields, validation rules, or capabilities.
+
+Compatibility requirements should be documented when the specification changes.
+
+Example: Prometheus
+
+A compliant Prometheus module may look like:
+
+prometheus/
+├── compose.yml
+├── metadata.yml
+├── docs.md
+├── config/
+│   └── prometheus.yml
+└── scripts/
+    ├── install.sh
+    ├── update.sh
+    ├── uninstall.sh
+    └── healthcheck.sh
+
+Example metadata:
+
+id: prometheus
+name: Prometheus
+display_name: Prometheus Metrics
+
+spec_version: "1.0"
+version: "0.1.0"
 
 category: monitoring
 
-description: Metrics collection engine.
+description: Time-series metrics collection and storage engine.
 
 author: HomeLab Sentinel
-
 license: Apache-2.0
+
+status: enabled
+
+homepage: https://prometheus.io/
+documentation: docs.md
+
+compose: compose.yml
+healthcheck: scripts/healthcheck.sh
+
+install: scripts/install.sh
+update: scripts/update.sh
+uninstall: scripts/uninstall.sh
+
+dependencies:
+  - docker
+
+capabilities:
+  - metrics
+  - monitoring
+
+ports:
+  - 9090
+
+volumes:
+  - prometheus-data
+
+tags:
+  - monitoring
+  - metrics
+  - observability
+Example: Homepage
+
+A simpler module may provide only the fields required for its operation.
+
+Example:
+
+id: homepage
+name: Homepage
+
+spec_version: "1.0"
+version: "1.0.0"
+
+category: core
+
+description: HomeLab Sentinel dashboard and unified infrastructure interface.
 
 status: enabled
 
@@ -171,172 +769,62 @@ dependencies:
   - docker
 
 capabilities:
-  - metrics
+  - dashboard
+  - docker-integration
+  - service-overview
 
-ports:
-  - 9090
+healthcheck: scripts/healthcheck.sh
 
-volumes:
-  - prometheus-data
-```
+Modules do not need to declare optional fields that do not apply to them.
 
----
+Design Principles in Practice
 
-# Module Categories
+The module system follows these principles:
 
-Current categories include:
+Self-Description
 
-* monitoring
-* discovery
-* logging
-* infrastructure
-* integrations
-* notifications
-* optional
+Modules describe themselves through metadata.
 
-Additional categories may be introduced as the project evolves.
+No Hardcoded Modules
 
----
+Core components should not contain special cases for individual modules.
 
-# Capabilities
+Separation of Concerns
+Metadata
+   ↓
+Identity and capabilities
 
-Capabilities describe what a module provides rather than how it is implemented.
+Registry
+   ↓
+Discovery, indexing and validation
 
-Examples:
+Deployment Engine
+   ↓
+Lifecycle management
 
-* metrics
-* dashboards
-* discovery
-* inventory
-* alerts
-* logging
-* visualization
-* integration
-* backup
-* security
+Module
+   ↓
+Actual functionality
+Minimal Manual Configuration
 
-The Sentinel Core interacts with capabilities instead of module names whenever possible.
+If a module can describe itself automatically, the user should not need to configure it manually.
 
----
+Replaceability
 
-# Module Lifecycle
+Modules should be replaceable without requiring changes to unrelated Sentinel components.
 
-Every module follows the same lifecycle.
+Maintainability
 
-```text
-Install
-    ↓
-Configure
-    ↓
-Start
-    ↓
-Health Check
-    ↓
-Register
-    ↓
-Running
-    ↓
-Update
-    ↓
-Restart
-    ↓
-Remove
-```
+Module structure should remain predictable so that troubleshooting and maintenance are straightforward.
 
-The Deployment Engine is responsible for executing lifecycle stages.
+Specification Status
 
----
+Specification Version: 1.0
 
-# Dependency Management
+Status: Approved
 
-Modules declare their dependencies through `metadata.yml`.
+This document represents the first formal HomeLab Sentinel module contract.
 
-The Deployment Engine resolves dependencies before installation.
+The specification may evolve as additional modules and platform capabilities are implemented.
 
-Circular dependencies are not permitted.
-
----
-
-# Health Monitoring
-
-Every module must expose a health status.
-
-Health checks should verify:
-
-* Service availability
-* Configuration validity
-* Required resources
-* Connectivity to dependent services
-
-Health information is reported to the Sentinel Core.
-
----
-
-# Configuration Principles
-
-Configuration should favour:
-
-* Automatic detection
-* Sensible defaults
-* Minimal user interaction
-
-Manual configuration should only be required when automatic configuration is impossible.
-
----
-
-# Logging
-
-Modules should:
-
-* Produce meaningful logs
-* Avoid excessive verbosity
-* Clearly identify errors
-* Support troubleshooting
-
----
-
-# Security
-
-Modules should:
-
-* Use the minimum required privileges
-* Avoid privileged containers whenever possible
-* Validate configuration before startup
-* Never expose secrets through logs
-
----
-
-# Versioning
-
-Modules follow Semantic Versioning.
-
-Example:
-
-* 1.0.0
-* 1.2.1
-* 2.0.0
-
-The module version is independent of the HomeLab Sentinel platform version.
-
----
-
-# Future Compatibility
-
-This specification is intended to support future module types, including:
-
-* Native services
-* Docker containers
-* External integrations
-* Community plugins
-* Dashboard packs
-* Rule packs
-
-The specification should evolve without breaking existing modules whenever possible.
-
----
-
-# Final Principle
-
-A HomeLab Sentinel module is a self-contained component that provides one or more capabilities through a standardized structure and lifecycle.
-
-Consistency across modules is considered more important than individual implementation preferences.
+Changes should be documented and tested against existing modules before adoption.
