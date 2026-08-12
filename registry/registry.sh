@@ -19,6 +19,7 @@ HomeLab Sentinel Registry
 
 Usage:
   registry.sh list
+  registry.sh get <module>
   registry.sh refresh
 EOF
 }
@@ -28,6 +29,35 @@ find_modules() {
         -type f \
         -name "metadata.yml" \
         -print
+}
+
+find_module_metadata() {
+    local requested_id="$1"
+
+    while IFS= read -r metadata_file; do
+        local module_id
+
+        module_id="$(
+            python3 - "${metadata_file}" <<'PY'
+import sys
+import yaml
+
+metadata_file = sys.argv[1]
+
+with open(metadata_file, "r", encoding="utf-8") as file:
+    metadata = yaml.safe_load(file) or {}
+
+print(metadata.get("id", ""))
+PY
+        )"
+
+        if [[ "${module_id}" == "${requested_id}" ]]; then
+            echo "${metadata_file}"
+            return 0
+        fi
+    done < <(find_modules)
+
+    return 1
 }
 
 list_modules() {
@@ -49,7 +79,7 @@ metadata_file = sys.argv[1]
 module_dir = sys.argv[2]
 
 with open(metadata_file, "r", encoding="utf-8") as file:
-    metadata = yaml.safe_load(file)
+    metadata = yaml.safe_load(file) or {}
 
 module_id = metadata.get("id", "unknown")
 name = metadata.get("name", "unknown")
@@ -72,13 +102,47 @@ PY
     fi
 }
 
+get_module() {
+    local requested_id="$1"
+
+    local metadata_file
+
+    if ! metadata_file="$(find_module_metadata "${requested_id}")"; then
+        log_error "Module not found: ${requested_id}"
+        echo "[SUGGESTION] Run:"
+        echo "  ${0} list"
+        echo "[SUGGESTION] Verify the module ID and try again."
+        return 1
+    fi
+
+    log_info "Module found: ${requested_id}"
+    echo
+
+    cat "${metadata_file}"
+}
+
+refresh_registry() {
+    log_info "Registry refresh is not implemented yet."
+}
+
 case "${1:-}" in
     list)
         list_modules
         ;;
 
+    get)
+        if [[ -z "${2:-}" ]]; then
+            log_error "Missing module ID."
+            echo "[SUGGESTION] Usage:"
+            echo "  ${0} get <module>"
+            exit 1
+        fi
+
+        get_module "${2}"
+        ;;
+
     refresh)
-        log_info "Registry refresh is not implemented yet."
+        refresh_registry
         ;;
 
     *)
