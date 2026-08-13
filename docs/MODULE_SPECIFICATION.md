@@ -100,6 +100,8 @@ Every module MUST contain:
 
 metadata.yml
 
+A module MUST provide compose.yml when Docker Compose is required for its deployment.
+
 The metadata file is the authoritative definition of the module.
 
 The Registry indexes module metadata.
@@ -678,7 +680,7 @@ Example:
 
 version: "0.1.0"
 
-Modules MAY also declare the specification version they were written against:
+Modules SHOULD declare the specification version they were written against:
 
 spec_version: "1.0"
 
