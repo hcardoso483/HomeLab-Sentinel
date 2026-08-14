@@ -195,6 +195,16 @@ for field in required_fields:
     if field not in metadata or metadata[field] in (None, ""):
         errors.append(f"Missing required field: {field}")
 
+spec_version = metadata.get("spec_version")
+
+if spec_version in (None, ""):
+    warnings.append("Missing recommended field: spec_version")
+elif not re.fullmatch(r"[0-9]+\.[0-9]+", str(spec_version)):
+    errors.append(
+        f"Invalid spec_version: {spec_version}. "
+        "Expected format: major.minor"
+    )
+
 module_id = metadata.get("id")
 
 if module_id:

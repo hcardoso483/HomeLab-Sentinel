@@ -5,6 +5,7 @@ name: Prometheus
 display_name: Prometheus Metrics
 
 version: 0.1.0
+spec_version: "1.0"
 
 category: monitoring
 

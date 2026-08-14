@@ -1,6 +1,7 @@
 id: homepage
 name: Homepage
 version: "1.0.0"
+spec_version: "1.0"
 category: core
 description: HomeLab Sentinel dashboard and unified infrastructure interface.
 
