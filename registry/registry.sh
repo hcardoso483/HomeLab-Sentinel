@@ -20,6 +20,7 @@ HomeLab Sentinel Registry
 Usage:
   registry.sh list
   registry.sh get <module>
+  registry.sh info <module>
   registry.sh validate
   registry.sh refresh
 EOF_USAGE
@@ -120,6 +121,102 @@ get_module() {
     echo
 
     cat "${metadata_file}"
+}
+
+info_module() {
+    local requested_id="$1"
+    local metadata_file
+
+    if ! metadata_file="$(find_module_metadata "${requested_id}")"; then
+        log_error "Module not found: ${requested_id}"
+        echo "[SUGGESTION] Run:"
+        echo "  ${0} list"
+        echo "[SUGGESTION] Verify the module ID and try again."
+        return 1
+    fi
+
+    local module_dir
+    module_dir="$(dirname "${metadata_file}")"
+
+    python3 - "${metadata_file}" "${module_dir}" <<'PY_INFO'
+import sys
+import yaml
+
+metadata_file = sys.argv[1]
+module_dir = sys.argv[2]
+
+with open(metadata_file, "r", encoding="utf-8") as file:
+    metadata = yaml.safe_load(file) or {}
+
+def value(field, default=None):
+    result = metadata.get(field)
+    if result in (None, ""):
+        return default
+    return result
+
+def print_field(label, field):
+    result = value(field)
+    if result is not None:
+        print(f"{label:<15} {result}")
+
+print("Module Information")
+print("------------------")
+print_field("ID:", "id")
+print_field("Name:", "name")
+print_field("Display Name:", "display_name")
+print_field("Version:", "version")
+print_field("Spec Version:", "spec_version")
+print_field("Category:", "category")
+print_field("Status:", "status")
+print()
+
+description = value("description")
+if description is not None:
+    print("Description:")
+    print(f"  {description}")
+    print()
+
+for field, title in [
+    ("author", "Author"),
+    ("license", "License"),
+    ("homepage", "Homepage"),
+    ("documentation", "Documentation"),
+    ("compose", "Compose"),
+    ("healthcheck", "Healthcheck"),
+]:
+    result = value(field)
+    if result is not None:
+        print(f"{title}:")
+        print(f"  {result}")
+        print()
+
+for field, title in [
+    ("dependencies", "Dependencies"),
+    ("capabilities", "Capabilities"),
+    ("ports", "Ports"),
+    ("volumes", "Volumes"),
+    ("tags", "Tags"),
+]:
+    items = value(field)
+    if not items:
+        continue
+
+    print(f"{title}:")
+
+    if isinstance(items, list):
+        for item in items:
+            print(f"  - {item}")
+    elif isinstance(items, dict):
+        for key, item in items.items():
+            print(f"  - {key}: {item}")
+    else:
+        print(f"  - {items}")
+
+    print()
+
+print("Location:")
+print(f"  {module_dir}")
+PY_INFO
 }
 
 validate_modules() {
@@ -367,6 +464,17 @@ case "${1:-}" in
         fi
 
         get_module "${2}"
+        ;;
+
+    info)
+        if [[ -z "${2:-}" ]]; then
+            log_error "Missing module ID."
+            echo "[SUGGESTION] Usage:"
+            echo "  ${0} info <module>"
+            exit 1
+        fi
+
+        info_module "${2}"
         ;;
 
     validate)
