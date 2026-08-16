@@ -99,9 +99,44 @@ try:
         print("[ERROR] 'dependencies' must be a list.")
         sys.exit(1)
 
-    if not isinstance(metadata["capabilities"], list):
-        print("[ERROR] 'capabilities' must be a list.")
+    capabilities = metadata["capabilities"]
+
+    if isinstance(capabilities, list):
+        # Specification 1.0 legacy format.
+        capability_list = capabilities
+
+    elif isinstance(capabilities, dict):
+        # Specification 1.1 structured format.
+        if "provides" not in capabilities:
+            print(
+                "[ERROR] Invalid capabilities: "
+                "missing 'provides' field."
+            )
+            sys.exit(1)
+
+        capability_list = capabilities["provides"]
+
+        if not isinstance(capability_list, list):
+            print(
+                "[ERROR] Invalid capabilities.provides: "
+                "expected a list."
+            )
+            sys.exit(1)
+
+    else:
+        print(
+            "[ERROR] Invalid capabilities: "
+            "expected a list or mapping."
+        )
         sys.exit(1)
+
+    for capability in capability_list:
+        if not isinstance(capability, str) or not capability:
+            print(
+                f"[ERROR] Invalid capability: {capability}. "
+                "Capabilities must be non-empty strings."
+            )
+            sys.exit(1)
 
     print("[INFO] Metadata validation successful.")
 
