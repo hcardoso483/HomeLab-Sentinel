@@ -445,7 +445,39 @@ The user's selection remains unchanged for future operations.
 
 ---
 
-## 20. Design Goals
+## 20. Resolution Failure and Suggestions
+
+Provider resolution failures MUST produce actionable diagnostics.
+
+When no valid provider can be selected for a requested capability, the Resolver MUST:
+
+1. Report the capability that could not be resolved.
+2. Report why provider resolution failed.
+3. Suggest available providers when candidates exist.
+4. Suggest a recommended provider when an installation recommendation is defined.
+5. Explain what action the user can take to continue.
+6. Stop installation when no valid provider can be selected.
+
+Suggestions are informational and MUST NOT silently become provider selections.
+
+The Resolver MUST NOT modify the user's provider configuration as a side effect of reporting an error.
+
+Example:
+
+```text
+[ERROR] No provider available.
+[DETAIL] Capability: metrics
+[DETAIL] No installed or available module provides this capability.
+
+[SUGGESTION] Install a provider that supports: metrics
+[SUGGESTION] Recommended provider: Prometheus
+[SUGGESTION] Installation cannot continue until a provider is available.
+```
+
+A suggestion MUST NOT override an explicit user selection.
+
+
+## 21. Design Goals
 
 The Provider Architecture is designed to provide:
 
