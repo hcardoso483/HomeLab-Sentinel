@@ -122,6 +122,28 @@ The specification version is independent from the module's own version.
 
 This allows the Registry and Deployment Engine to identify compatibility requirements when the specification evolves.
 
+Specification Versions
+
+Specification 1.0 defines the original module metadata format.
+
+Specification 1.1 introduces the structured capability format:
+
+capabilities:
+  provides:
+    - metrics
+    - monitoring
+
+Modules using Specification 1.0 MAY use the legacy capability format:
+
+capabilities:
+  - metrics
+  - monitoring
+
+The Registry SHOULD support the legacy format during the Specification 1.1 transition period.
+
+Modules written against Specification 1.1 SHOULD use the structured capability format.
+
+
 Required Metadata
 
 The following fields are required:
@@ -352,15 +374,46 @@ Capabilities
 
 Modules MAY declare capabilities.
 
-Example:
+Capabilities describe functionality that a module provides to the HomeLab Sentinel ecosystem.
+
+Specification 1.1 uses the structured capability format:
 
 capabilities:
-  - metrics
-  - monitoring
+  provides:
+    - metrics
+    - monitoring
 
-Capabilities describe what the module provides to the HomeLab Sentinel ecosystem.
+The `provides` field contains a list of machine-readable capability identifiers.
 
-Examples include:
+Capability identifiers SHOULD use lowercase letters, numbers, and hyphens.
+
+Multiple modules MAY provide the same capability.
+
+This allows multiple implementations of the same functionality to coexist.
+
+For example:
+
+Prometheus:
+
+capabilities:
+  provides:
+    - metrics
+    - monitoring
+
+VictoriaMetrics:
+
+capabilities:
+  provides:
+    - metrics
+    - monitoring
+
+The Registry may use capability declarations to identify modules that can act as providers for a requested capability.
+
+Capability declarations do not determine which provider is selected.
+
+Provider selection and default providers are installation-level configuration and MUST NOT be declared by individual modules.
+
+Initial capabilities include:
 
 dashboard
 metrics
@@ -371,7 +424,19 @@ alerting
 storage
 automation
 
-Capabilities are informational and may later be used for automatic integration.
+Legacy Capability Format
+
+Modules written against Specification 1.0 MAY use the legacy format:
+
+capabilities:
+  - metrics
+  - monitoring
+
+The Registry SHOULD continue to recognize the legacy format during the Specification 1.1 transition period.
+
+Legacy capability declarations are treated as equivalent to the `provides` list for compatibility purposes.
+
+New modules written against Specification 1.1 SHOULD use the structured `capabilities.provides` format.
 
 Ports
 

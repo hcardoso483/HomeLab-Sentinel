@@ -327,6 +327,47 @@ if status and status not in valid_statuses:
         f"Supported statuses: {', '.join(sorted(valid_statuses))}"
     )
 
+capabilities = metadata.get("capabilities")
+
+if capabilities is not None:
+    if isinstance(capabilities, list):
+        # Legacy Specification 1.0 capability format.
+        capability_list = capabilities
+
+    elif isinstance(capabilities, dict):
+        # Specification 1.1 structured capability format.
+        if "provides" not in capabilities:
+            errors.append(
+                "Invalid capabilities: missing required 'provides' field."
+            )
+            capability_list = []
+        else:
+            capability_list = capabilities["provides"]
+
+            if not isinstance(capability_list, list):
+                errors.append(
+                    "Invalid capabilities.provides: expected a list."
+                )
+                capability_list = []
+
+    else:
+        errors.append(
+            "Invalid capabilities: expected a list or mapping."
+        )
+        capability_list = []
+
+    for capability in capability_list:
+        if not isinstance(capability, str) or not capability:
+            errors.append(
+                f"Invalid capability: {capability}. "
+                "Capabilities must be non-empty strings."
+            )
+        elif not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", capability):
+            errors.append(
+                f"Invalid capability: {capability}. "
+                "Use lowercase letters, numbers, and hyphens."
+            )
+
 for field in [
     "compose",
     "healthcheck",
