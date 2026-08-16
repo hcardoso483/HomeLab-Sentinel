@@ -21,6 +21,7 @@ Usage:
   registry.sh list
   registry.sh get <module>
   registry.sh info <module>
+  registry.sh providers <capability>
   registry.sh validate
   registry.sh refresh
 EOF_USAGE
@@ -217,6 +218,65 @@ for field, title in [
 print("Location:")
 print(f"  {module_dir}")
 PY_INFO
+}
+
+
+providers_module() {
+    local requested_capability="$1"
+
+    log_info "Searching for providers..."
+    echo
+    echo "Capability: ${requested_capability}"
+    echo
+    echo "Providers:"
+
+    local found=0
+
+    while IFS= read -r metadata_file; do
+        local result
+
+        result="$(
+            python3 - "${metadata_file}" "${requested_capability}" <<'PY_PROVIDER'
+import sys
+import yaml
+
+metadata_file = sys.argv[1]
+requested_capability = sys.argv[2]
+
+with open(metadata_file, "r", encoding="utf-8") as file:
+    metadata = yaml.safe_load(file) or {}
+
+capabilities = metadata.get("capabilities", {})
+
+if isinstance(capabilities, list):
+    capability_list = capabilities
+elif isinstance(capabilities, dict):
+    capability_list = capabilities.get("provides", [])
+else:
+    capability_list = []
+
+if requested_capability in capability_list:
+    module_id = metadata.get("id", "unknown")
+    name = metadata.get("name", "unknown")
+    print(f"  - {module_id}")
+    print(f"    Name: {name}")
+PY_PROVIDER
+        )"
+
+        if [[ -n "${result}" ]]; then
+            echo "${result}"
+            found=1
+        fi
+
+    done < <(find_modules)
+
+    echo
+
+    if [[ "${found}" -eq 0 ]]; then
+        log_error "No providers found for capability: ${requested_capability}"
+        echo "[SUGGESTION] Install a module that provides this capability."
+        return 1
+    fi
 }
 
 validate_modules() {
@@ -516,6 +576,17 @@ case "${1:-}" in
         fi
 
         info_module "${2}"
+        ;;
+
+    providers)
+        if [[ -z "${2:-}" ]]; then
+            log_error "Missing capability."
+            echo "[SUGGESTION] Usage:"
+            echo "  ${0} providers <capability>"
+            exit 1
+        fi
+
+        providers_module "${2}"
         ;;
 
     validate)
