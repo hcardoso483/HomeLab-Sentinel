@@ -477,7 +477,130 @@ Example:
 A suggestion MUST NOT override an explicit user selection.
 
 
-## 21. Design Goals
+## 21. Provider Acquisition
+
+The Provider Acquisition layer is responsible for obtaining a provider when the Provider Resolver cannot use an already available provider.
+
+Provider Acquisition MUST remain separate from the Provider Resolver.
+
+The Provider Resolver decides which provider should satisfy a capability.
+
+The Provider Acquisition layer determines whether that provider can be obtained and, when authorized by the user, obtains it.
+
+Provider Acquisition MUST:
+
+1. Identify providers that can be obtained for the requested capability.
+2. Report available acquisition options.
+3. Respect an explicit user provider selection.
+4. Present a recommended provider when one is defined.
+5. Request user confirmation before acquiring a provider.
+6. Obtain the provider using its declared acquisition method.
+7. Validate the acquired provider before returning success.
+8. Report acquisition failures with actionable diagnostics.
+9. Never silently replace an explicit provider selection.
+10. Never modify provider configuration merely because acquisition was attempted.
+
+Provider Acquisition MUST NOT:
+
+- Perform provider selection independently of the Resolver.
+- Deploy the acquired provider directly as part of acquisition.
+- Download arbitrary software without validated provider metadata.
+- Silently change the user's provider configuration.
+
+### 21.1 Acquisition Sources
+
+Each obtainable provider SHOULD declare a validated acquisition source in its module metadata.
+
+Example:
+
+    source:
+      type: docker
+      image: prom/prometheus
+
+The acquisition source identifies how the provider can be obtained.
+
+Supported acquisition source types SHOULD be explicitly defined by HomeLab Sentinel.
+
+The initial implementation SHOULD support Docker-based providers.
+
+Future acquisition methods MAY include repository packages or other supported distribution mechanisms.
+
+### 21.2 Acquisition Flow
+
+When the Resolver cannot find a valid available provider:
+
+    Provider Resolver
+            |
+            v
+    Provider unavailable
+            |
+            v
+    Provider Acquisition
+            |
+            +--> Find obtainable providers
+            |
+            +--> Present options
+            |
+            +--> Request confirmation
+            |
+            +--> Acquire provider
+            |
+            +--> Validate provider
+            |
+            v
+    Provider available
+            |
+            v
+    Provider Resolver
+            |
+            v
+    Deployment Engine
+
+A successful acquisition MUST return control to the Resolver.
+
+The Resolver MUST re-evaluate the provider after acquisition rather than assuming that acquisition succeeded merely because the acquisition command completed.
+
+### 21.3 User Confirmation
+
+Provider acquisition MUST require explicit user confirmation unless a future non-interactive installation mode explicitly authorizes automatic acquisition.
+
+Example:
+
+    [INFO] No available provider satisfies: metrics
+
+    [SUGGESTION] Obtainable providers:
+
+      1. prometheus
+      2. victoriametrics
+
+    [RECOMMENDED] prometheus
+
+    Install prometheus? [Y/n]
+
+Declining acquisition MUST stop the affected installation operation without changing provider configuration.
+
+### 21.4 Acquisition Failure
+
+If acquisition fails, the system MUST report:
+
+1. The requested provider.
+2. The acquisition method.
+3. The reason acquisition failed when known.
+4. Any actionable recovery suggestion.
+5. That the provider configuration was not changed.
+
+Example:
+
+    [ERROR] Provider acquisition failed.
+    [DETAIL] Provider: prometheus
+    [DETAIL] Source type: docker
+    [DETAIL] The provider could not be obtained.
+
+    [SUGGESTION] Verify Docker connectivity and try again.
+    [SUGGESTION] Your provider configuration was not changed.
+
+The Deployment Engine MUST NOT proceed until the selected provider has been successfully acquired and validated.
+## 22. Design Goals
 
 The Provider Architecture is designed to provide:
 
