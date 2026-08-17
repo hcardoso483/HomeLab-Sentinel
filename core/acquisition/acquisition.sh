@@ -24,6 +24,7 @@ usage() {
 HomeLab Sentinel Provider Acquisition
 
 Usage:
+  acquisition.sh discover <capability>
   acquisition.sh source <provider>
   acquisition.sh acquire <capability> <provider>
 EOF_USAGE
@@ -189,7 +190,54 @@ acquire_docker_image() {
     return 0
 }
 
+discover_providers() {
+    local capability="$1"
+    local providers
+
+    providers="$("${REGISTRY}" provider-sources "${capability}" || true)"
+
+    echo
+    log_info "Providers available for acquisition."
+    echo "[DETAIL] Capability: ${capability}"
+    echo
+
+    if [[ -z "${providers}" ]]; then
+        echo "[INFO] No obtainable providers were found."
+        echo "[SUGGESTION] Install or register a provider that supports: ${capability}"
+        return 1
+    fi
+
+    local count=0
+    local provider
+    local source_type
+    local image
+
+    while IFS='|' read -r provider source_type image; do
+        [[ -z "${provider}" ]] && continue
+
+        count=$((count + 1))
+
+        echo "  ${count}. ${provider}"
+        echo "     Source: ${source_type}"
+        echo "     Image:  ${image}"
+        echo
+    done <<< "${providers}"
+
+    echo "[INFO] ${count} obtainable provider(s) found."
+}
+
 case "${1:-}" in
+
+    discover)
+        if [[ -z "${2:-}" ]]; then
+            log_error "Missing capability."
+            echo "[SUGGESTION] Usage:"
+            echo "  ${0} discover <capability>"
+            exit 1
+        fi
+
+        discover_providers "${2}"
+        ;;
 
     source)
         if [[ -z "${2:-}" ]]; then
