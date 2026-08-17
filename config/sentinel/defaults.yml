@@ -1,0 +1,11 @@
+# HomeLab Sentinel installation defaults
+#
+# These defaults are installation-level policy.
+# They are used when no valid explicit provider selection exists.
+#
+# Defaults MUST be validated by the Provider Resolver before use.
+
+default_providers:
+  metrics: prometheus
+  monitoring: prometheus
+  dashboard: homepage

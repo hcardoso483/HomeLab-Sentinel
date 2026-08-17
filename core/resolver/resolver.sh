@@ -7,6 +7,7 @@ APP_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 REGISTRY="${APP_ROOT}/registry/registry.sh"
 PROVIDER_CONFIG="${APP_ROOT}/config/sentinel/providers.yml"
+DEFAULT_CONFIG="${APP_ROOT}/config/sentinel/defaults.yml"
 
 log_info() {
     echo "[INFO] $*"
@@ -31,10 +32,16 @@ EOF_USAGE
 
 require_configuration() {
     if [[ ! -f "${PROVIDER_CONFIG}" ]]; then
-        log_error "Provider configuration not found."
+        log_warn "Provider configuration not found."
         echo "[DETAIL] ${PROVIDER_CONFIG}"
+        echo "[INFO] Installation defaults may be used."
+    fi
+
+    if [[ ! -f "${DEFAULT_CONFIG}" ]]; then
+        log_error "Default provider configuration not found."
+        echo "[DETAIL] ${DEFAULT_CONFIG}"
         echo
-        echo "[SUGGESTION] Create the provider configuration before installation."
+        echo "[SUGGESTION] Create the default provider configuration."
         return 1
     fi
 }
@@ -42,7 +49,11 @@ require_configuration() {
 configured_provider() {
     local capability="$1"
 
-    python3 - "${PROVIDER_CONFIG}" "${capability}" <<'PY'
+    if [[ ! -f "${PROVIDER_CONFIG}" ]]; then
+        return 0
+    fi
+
+    python3 - "${PROVIDER_CONFIG}" "${capability}" <<'PY_CONFIG'
 import sys
 import yaml
 
@@ -81,7 +92,7 @@ except OSError as error:
         file=sys.stderr,
     )
     sys.exit(2)
-PY
+PY_CONFIG
 }
 
 provider_exists() {
@@ -101,17 +112,50 @@ available_providers() {
 installation_recommendation() {
     local capability="$1"
 
-    case "${capability}" in
-        metrics|monitoring)
-            echo "prometheus"
-            ;;
-        dashboard)
-            echo "homepage"
-            ;;
-        *)
-            return 1
-            ;;
-    esac
+    if [[ ! -f "${DEFAULT_CONFIG}" ]]; then
+        return 1
+    fi
+
+    python3 - "${DEFAULT_CONFIG}" "${capability}" <<'PY_DEFAULT'
+import sys
+import yaml
+
+config_file = sys.argv[1]
+capability = sys.argv[2]
+
+try:
+    with open(config_file, "r", encoding="utf-8") as file:
+        config = yaml.safe_load(file) or {}
+
+    defaults = config.get("default_providers", {})
+
+    if not isinstance(defaults, dict):
+        print(
+            "[ERROR] Invalid default provider configuration: "
+            "'default_providers' must be a mapping.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    provider = defaults.get(capability)
+
+    if provider is not None:
+        print(provider)
+
+except yaml.YAMLError as error:
+    print(
+        f"[ERROR] Invalid default provider configuration: {error}",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+
+except OSError as error:
+    print(
+        f"[ERROR] Unable to read default provider configuration: {error}",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+PY_DEFAULT
 }
 
 resolve_provider() {
