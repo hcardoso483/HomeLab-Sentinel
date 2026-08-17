@@ -279,6 +279,39 @@ PY_PROVIDER
     fi
 }
 
+
+provider_ids() {
+    local requested_capability="$1"
+
+    while IFS= read -r metadata_file; do
+        python3 - "${metadata_file}" "${requested_capability}" <<'PY_PROVIDER_IDS'
+import sys
+import yaml
+
+metadata_file = sys.argv[1]
+requested_capability = sys.argv[2]
+
+with open(metadata_file, "r", encoding="utf-8") as file:
+    metadata = yaml.safe_load(file) or {}
+
+capabilities = metadata.get("capabilities", {})
+
+if isinstance(capabilities, list):
+    capability_list = capabilities
+elif isinstance(capabilities, dict):
+    capability_list = capabilities.get("provides", [])
+else:
+    capability_list = []
+
+if requested_capability in capability_list:
+    module_id = metadata.get("id")
+
+    if module_id:
+        print(module_id)
+PY_PROVIDER_IDS
+    done < <(find_modules)
+}
+
 validate_modules() {
     log_info "Validating modules..."
     echo
@@ -587,6 +620,17 @@ case "${1:-}" in
         fi
 
         providers_module "${2}"
+        ;;
+
+    provider-ids)
+        if [[ -z "${2:-}" ]]; then
+            log_error "Missing capability."
+            echo "[SUGGESTION] Usage:"
+            echo "  ${0} provider-ids <capability>"
+            exit 1
+        fi
+
+        provider_ids "${2}"
         ;;
 
     validate)

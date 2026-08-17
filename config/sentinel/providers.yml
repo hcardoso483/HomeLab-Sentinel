@@ -1,0 +1,11 @@
+# HomeLab Sentinel provider selections
+#
+# These selections are installation-level configuration.
+# The Provider Resolver validates them before deployment.
+#
+# Removing or changing a provider here does not modify module metadata.
+
+providers:
+  metrics: prometheus
+  monitoring: prometheus
+  dashboard: homepage
