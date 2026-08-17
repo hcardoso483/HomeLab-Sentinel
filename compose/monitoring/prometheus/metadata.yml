@@ -17,6 +17,10 @@ license: Apache-2.0
 
 status: enabled
 
+source:
+  type: docker
+  image: prom/prometheus:latest
+
 homepage: https://prometheus.io/
 
 documentation: docs.md
