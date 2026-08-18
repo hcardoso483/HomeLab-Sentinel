@@ -1,0 +1,35 @@
+id: nmap
+name: Nmap
+display_name: Nmap Discovery
+
+version: "0.1.0"
+spec_version: "1.2"
+
+category: discovery
+
+description: Network host discovery provider for HomeLab Sentinel.
+
+author: HomeLab Sentinel
+license: Nmap Public Source License
+
+status: experimental
+
+homepage: https://nmap.org/
+
+dependencies:
+  platform:
+    - network
+  host:
+    - command: nmap
+      packages:
+        apt: nmap
+      required: true
+
+capabilities:
+  provides:
+    - discovery
+
+tags:
+  - discovery
+  - network
+  - nmap
