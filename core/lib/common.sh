@@ -243,9 +243,38 @@ PY
 
     log_info "Running module healthcheck..."
 
-    if "${healthcheck_path}"; then
-        log_info "Module healthcheck passed."
-    else
-        die "Module healthcheck failed."
-    fi
+    local max_attempts=6
+    local attempt=1
+
+    while (( attempt <= max_attempts )); do
+        if "${healthcheck_path}"; then
+            log_info "Module healthcheck passed."
+            return 0
+        fi
+
+        if (( attempt < max_attempts )); then
+            log_warn "Healthcheck failed (attempt ${attempt}/${max_attempts})."
+            log_info "Waiting 5 seconds before retry..."
+            sleep 5
+        fi
+
+        attempt=$((attempt + 1))
+    done
+
+    echo
+    log_error "Module healthcheck failed after ${max_attempts} attempts."
+    echo "[DETAIL] Module: ${module_dir}"
+    echo "[DETAIL] Healthcheck: ${healthcheck_path}"
+    echo
+    echo "[SUGGESTION] Check the module container status:"
+    echo "  docker compose -f ${module_dir}/compose.yml ps"
+    echo
+    echo "[SUGGESTION] Check the recent module logs:"
+    echo "  docker compose -f ${module_dir}/compose.yml logs --tail 50"
+    echo
+    echo "[SUGGESTION] Run the healthcheck manually:"
+    echo "  ${healthcheck_path}"
+    echo
+    echo "[SUGGESTION] Verify that the module service has finished starting."
+    return 1
 }
