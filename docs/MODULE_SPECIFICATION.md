@@ -1,6 +1,6 @@
 # HomeLab Sentinel Module Specification
 
-**Specification Version:** 1.1
+**Specification Version:** 1.2
 **Status:** Approved
 
 ---
@@ -116,7 +116,7 @@ Every module SHOULD declare the version of the HomeLab Sentinel Module Specifica
 
 Example:
 
-spec_version: "1.1"
+spec_version: "1.2"
 
 The specification version is independent from the module's own version.
 
@@ -142,6 +142,8 @@ capabilities:
 The Registry SHOULD support the legacy format during the Specification 1.1 transition period.
 
 Modules written against Specification 1.1 SHOULD use the structured capability format.
+
+Specification 1.2 introduces structured dependency declarations for platform and host-level requirements while preserving compatibility with legacy dependency lists.
 
 
 Required Metadata
@@ -346,27 +348,118 @@ Dependencies
 
 Modules MAY declare dependencies.
 
+Specification 1.0 and Specification 1.1 modules MAY use the legacy list format:
+
+dependencies:
+
+  - docker
+
+Specification 1.2 introduces structured dependency declarations.
+
 Example:
 
 dependencies:
+
+  platform:
+    - docker
+
+  host:
+    - command: nmap
+      packages:
+        apt: nmap
+      required: true
+
+The structured dependency format separates platform requirements from host operating-system dependencies.
+
+Platform Dependencies
+
+Platform dependencies describe runtime, infrastructure, or host capabilities required by a module.
+
+Initial platform dependency identifiers may include:
+
+docker
+
+network
+
+storage
+
+database
+
+module
+
+
+Platform dependencies are validated by the Deployment Engine.
+
+Host Dependencies
+
+Host dependencies describe executable commands that must be available on the HomeLab Sentinel host.
+
+A host dependency MAY declare:
+
+command
+
+packages
+
+required
+
+The command field identifies the executable that Sentinel must verify.
+
+Example:
+
+command: nmap
+
+The packages field maps supported package managers to the package that provides the required command.
+
+Example:
+
+packages:
+
+  apt: nmap
+
+Additional package managers may be supported in future implementations.
+
+The required field determines whether failure to satisfy the dependency must stop deployment.
+
+If required is omitted, it defaults to true.
+
+Automatic Dependency Acquisition
+
+Required host dependencies SHOULD be acquired automatically and non-interactively when all of the following conditions are true:
+
+- The required command is not already available.
+- The host uses a supported package manager.
+- The dependency declares a package for that package manager.
+- Sentinel has sufficient privileges to perform the installation safely.
+
+After acquisition, the Deployment Engine MUST verify that the required command is available before continuing.
+
+If automatic acquisition fails, or the dependency cannot be satisfied safely, deployment MUST stop and provide actionable diagnostics.
+
+Module runtime scripts MUST NOT install their own operating-system dependencies.
+
+Dependency acquisition and verification belong to the Deployment Engine.
+
+Backward Compatibility
+
+The Deployment Engine MUST continue to accept legacy dependency lists used by Specification 1.0 and Specification 1.1 modules.
+
+For example:
+
+dependencies:
+
   - docker
+
+Legacy dependency declarations are interpreted according to their established platform dependency semantics.
+
+Validation
 
 Dependencies are validated before deployment.
 
-The Deployment Engine is responsible for dependency validation.
+The Deployment Engine is responsible for dependency validation and acquisition.
 
-Circular dependencies are not permitted.
+Circular module dependencies are not permitted.
 
 The Deployment Engine must detect dependency cycles before deployment and report them as validation errors.
-
-Initial dependency types may include:
-
-docker
-network
-storage
-database
-module
-host-capability
 
 Dependency definitions should remain declarative.
 
@@ -735,7 +828,7 @@ Versioning
 
 The module specification itself is versioned independently from individual modules.
 
-Current Specification Version: 1.1
+Current Specification Version: 1.2
 
 Changes to the specification must consider backward compatibility.
 
@@ -747,7 +840,7 @@ version: "0.1.0"
 
 Modules SHOULD declare the specification version they were written against:
 
-spec_version: "1.1"
+spec_version: "1.2"
 
 Future specification versions may introduce new required fields, validation rules, or capabilities.
 

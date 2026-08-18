@@ -464,6 +464,112 @@ if status and status not in valid_statuses:
         f"Supported statuses: {', '.join(sorted(valid_statuses))}"
     )
 
+dependencies = metadata.get("dependencies")
+
+if dependencies is not None:
+    if isinstance(dependencies, list):
+        # Legacy Specification 1.0 / 1.1 dependency format.
+        for dependency in dependencies:
+            if not isinstance(dependency, str) or not dependency:
+                errors.append(
+                    f"Invalid dependency: {dependency}. "
+                    "Legacy dependencies must be non-empty strings."
+                )
+
+    elif isinstance(dependencies, dict):
+        # Specification 1.2 structured dependency format.
+        if spec_version in (None, ""):
+            errors.append(
+                "Structured dependencies require spec_version 1.2 or newer."
+            )
+        elif re.fullmatch(r"[0-9]+\.[0-9]+", str(spec_version)):
+            major, minor = map(int, str(spec_version).split("."))
+
+            if (major, minor) < (1, 2):
+                errors.append(
+                    "Structured dependencies require spec_version 1.2 or newer."
+                )
+
+        allowed_dependency_keys = {"platform", "host"}
+
+        for key in dependencies:
+            if key not in allowed_dependency_keys:
+                errors.append(
+                    f"Unsupported dependency section: {key}"
+                )
+
+        platform_dependencies = dependencies.get("platform", [])
+
+        if not isinstance(platform_dependencies, list):
+            errors.append(
+                "Invalid dependencies.platform: expected a list."
+            )
+        else:
+            for dependency in platform_dependencies:
+                if not isinstance(dependency, str) or not dependency:
+                    errors.append(
+                        f"Invalid platform dependency: {dependency}. "
+                        "Platform dependencies must be non-empty strings."
+                    )
+
+        host_dependencies = dependencies.get("host", [])
+
+        if not isinstance(host_dependencies, list):
+            errors.append(
+                "Invalid dependencies.host: expected a list."
+            )
+        else:
+            for index, dependency in enumerate(host_dependencies, start=1):
+                if not isinstance(dependency, dict):
+                    errors.append(
+                        f"Invalid host dependency #{index}: expected a mapping."
+                    )
+                    continue
+
+                command = dependency.get("command")
+
+                if not isinstance(command, str) or not command:
+                    errors.append(
+                        f"Invalid host dependency #{index}: "
+                        "missing non-empty command."
+                    )
+
+                packages = dependency.get("packages")
+
+                if packages is not None:
+                    if not isinstance(packages, dict):
+                        errors.append(
+                            f"Invalid host dependency #{index}: "
+                            "packages must be a mapping."
+                        )
+                    else:
+                        for manager, package in packages.items():
+                            if not isinstance(manager, str) or not manager:
+                                errors.append(
+                                    f"Invalid host dependency #{index}: "
+                                    "package manager name must be a non-empty string."
+                                )
+
+                            if not isinstance(package, str) or not package:
+                                errors.append(
+                                    f"Invalid host dependency #{index}: "
+                                    f"package for {manager} must be a non-empty string."
+                                )
+
+                required = dependency.get("required", True)
+
+                if not isinstance(required, bool):
+                    errors.append(
+                        f"Invalid host dependency #{index}: "
+                        "required must be true or false."
+                    )
+
+    else:
+        errors.append(
+            "Invalid dependencies: expected a list or mapping."
+        )
+
+
 capabilities = metadata.get("capabilities")
 
 if capabilities is not None:

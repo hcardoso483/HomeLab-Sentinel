@@ -95,8 +95,13 @@ try:
         )
         sys.exit(1)
 
-    if not isinstance(metadata["dependencies"], list):
-        print("[ERROR] 'dependencies' must be a list.")
+    dependencies = metadata["dependencies"]
+
+    if not isinstance(dependencies, (list, dict)):
+        print(
+            "[ERROR] Invalid dependencies: "
+            "expected a list or mapping."
+        )
         sys.exit(1)
 
     capabilities = metadata["capabilities"]
@@ -153,56 +158,13 @@ PY
 check_dependencies() {
     local module_dir="$1"
     local metadata_file="${module_dir}/metadata.yml"
+    local dependency_helper="${SENTINEL_ROOT}/core/deployment/dependencies.py"
 
     [[ -f "${metadata_file}" ]] || die "Metadata file not found: ${metadata_file}"
 
-    python3 - "${metadata_file}" <<'PY'
-import sys
-import shutil
-import yaml
+    [[ -f "${dependency_helper}" ]] || die "Dependency helper not found: ${dependency_helper}"
 
-metadata_file = sys.argv[1]
-
-try:
-    with open(metadata_file, "r", encoding="utf-8") as file:
-        metadata = yaml.safe_load(file)
-
-    dependencies = metadata.get("dependencies", [])
-
-    if not isinstance(dependencies, list):
-        print("[ERROR] 'dependencies' must be a list.")
-        sys.exit(1)
-
-    if not dependencies:
-        print("[INFO] No dependencies declared.")
-        sys.exit(0)
-
-    failed = False
-
-    for dependency in dependencies:
-        if dependency == "docker":
-            if shutil.which("docker"):
-                print("[INFO] Dependency available: docker")
-            else:
-                print("[ERROR] Dependency missing: docker")
-                failed = True
-
-        else:
-            print(f"[WARN] Dependency check not implemented: {dependency}")
-
-    if failed:
-        sys.exit(1)
-
-    print("[INFO] Dependency validation successful.")
-
-except yaml.YAMLError as error:
-    print(f"[ERROR] Invalid YAML: {error}")
-    sys.exit(1)
-
-except OSError as error:
-    print(f"[ERROR] Unable to read metadata: {error}")
-    sys.exit(1)
-PY
+    python3 "${dependency_helper}" "${metadata_file}"
 }
 
 run_healthcheck() {
