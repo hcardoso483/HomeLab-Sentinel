@@ -1,6 +1,6 @@
 # HomeLab Sentinel Module Specification
 
-**Specification Version:** 1.0
+**Specification Version:** 1.1
 **Status:** Approved
 
 ---
@@ -116,7 +116,7 @@ Every module SHOULD declare the version of the HomeLab Sentinel Module Specifica
 
 Example:
 
-spec_version: "1.0"
+spec_version: "1.1"
 
 The specification version is independent from the module's own version.
 
@@ -735,7 +735,7 @@ Versioning
 
 The module specification itself is versioned independently from individual modules.
 
-Current Specification Version: 1.0
+Current Specification Version: 1.1
 
 Changes to the specification must consider backward compatibility.
 
@@ -747,7 +747,7 @@ version: "0.1.0"
 
 Modules SHOULD declare the specification version they were written against:
 
-spec_version: "1.0"
+spec_version: "1.1"
 
 Future specification versions may introduce new required fields, validation rules, or capabilities.
 
@@ -775,7 +775,7 @@ id: prometheus
 name: Prometheus
 display_name: Prometheus Metrics
 
-spec_version: "1.0"
+spec_version: "1.1"
 version: "0.1.0"
 
 category: monitoring
@@ -801,8 +801,9 @@ dependencies:
   - docker
 
 capabilities:
-  - metrics
-  - monitoring
+  provides:
+    - metrics
+    - monitoring
 
 ports:
   - 9090
@@ -823,7 +824,7 @@ Example:
 id: homepage
 name: Homepage
 
-spec_version: "1.0"
+spec_version: "1.1"
 version: "1.0.0"
 
 category: core
@@ -836,9 +837,10 @@ dependencies:
   - docker
 
 capabilities:
-  - dashboard
-  - docker-integration
-  - service-overview
+  provides:
+    - dashboard
+    - docker-integration
+    - service-overview
 
 healthcheck: scripts/healthcheck.sh
 
@@ -886,7 +888,7 @@ Module structure should remain predictable so that troubleshooting and maintenan
 
 Specification Status
 
-Specification Version: 1.0
+Specification Version: 1.1
 
 Status: Approved
 
