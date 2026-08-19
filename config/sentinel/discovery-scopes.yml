@@ -1,0 +1,14 @@
+# HomeLab Sentinel discovery scopes
+#
+# Discovery scopes define where active discovery may occur.
+#
+# No network is assumed by default.
+# Scopes are installation-specific configuration.
+
+scopes:
+  - id: primary-lan
+    target: 192.168.1.0/24
+    type: network
+    source: user
+    authorized: true
+    enabled: true
