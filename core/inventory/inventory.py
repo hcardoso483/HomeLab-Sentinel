@@ -6,6 +6,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
+
 DEFAULT_DATABASE = Path("/srv/homelab-sentinel/sentinel/inventory.db")
 
 
@@ -18,9 +19,16 @@ def current_schema_version(connection):
 
 
 def entity_observations(connection, entity_id):
-    return connection.execute("""
-        SELECT o.observation_id, o.provider, o.discovery_method,
-               o.discovered_at, o.payload_json
+    return connection.execute(
+        """
+        SELECT
+            o.observation_id,
+            o.provider,
+            o.discovery_method,
+            o.discovered_at,
+            o.received_at,
+            o.payload_json,
+            eo.correlation_method
         FROM observations AS o
         JOIN entity_observations AS eo
             ON eo.observation_id = o.observation_id
@@ -30,7 +38,9 @@ def entity_observations(connection, entity_id):
           AND c.status = 'resolved'
           AND c.entity_id = ?
         ORDER BY o.discovered_at, o.observation_id
-    """, (entity_id, entity_id)).fetchall()
+        """,
+        (entity_id, entity_id),
+    ).fetchall()
 
 
 def build_inventory_record(entity_id, entity_type, rows):
@@ -47,7 +57,15 @@ def build_inventory_record(entity_id, entity_type, rows):
 
     latest_host_record = None
 
-    for _, provider, discovery_method, discovered_at, payload_json in rows:
+    for (
+        _,
+        provider,
+        discovery_method,
+        _,
+        _,
+        payload_json,
+        _,
+    ) in rows:
         providers.add(provider)
         record = json.loads(payload_json)
 
@@ -94,14 +112,38 @@ def build_inventory_record(entity_id, entity_type, rows):
     }
 
 
+def inventory_record(connection, entity_id):
+    row = connection.execute(
+        """
+        SELECT entity_id, entity_type
+        FROM entities
+        WHERE entity_id = ?
+        """,
+        (entity_id,),
+    ).fetchone()
+
+    if row is None:
+        raise ValueError(f"entity not found: {entity_id}")
+
+    rows = entity_observations(connection, entity_id)
+    record = build_inventory_record(row[0], row[1], rows)
+
+    if record is None:
+        raise ValueError(f"entity has no resolved observations: {entity_id}")
+
+    return record
+
+
 def inventory_records(connection):
     records = []
 
-    for entity_id, entity_type in connection.execute("""
+    for entity_id, entity_type in connection.execute(
+        """
         SELECT entity_id, entity_type
         FROM entities
         ORDER BY entity_id
-    """):
+        """
+    ):
         rows = entity_observations(connection, entity_id)
         record = build_inventory_record(entity_id, entity_type, rows)
 
@@ -111,10 +153,136 @@ def inventory_records(connection):
     return records
 
 
+def unresolved_records(connection):
+    records = []
+
+    rows = connection.execute(
+        """
+        SELECT
+            c.observation_id,
+            c.reason,
+            c.decided_at,
+            o.provider,
+            o.discovery_method,
+            o.discovered_at,
+            o.received_at,
+            o.payload_json
+        FROM correlation_state AS c
+        JOIN observations AS o
+            ON o.observation_id = c.observation_id
+        WHERE c.status = 'unresolved'
+        ORDER BY o.discovered_at, c.observation_id
+        """
+    ).fetchall()
+
+    for (
+        observation_id,
+        reason,
+        decided_at,
+        provider,
+        discovery_method,
+        discovered_at,
+        received_at,
+        payload_json,
+    ) in rows:
+        records.append(
+            {
+                "observation_id": observation_id,
+                "status": "unresolved",
+                "reason": reason,
+                "decided_at": decided_at,
+                "provider": provider,
+                "discovery_method": discovery_method,
+                "discovered_at": discovered_at,
+                "received_at": received_at,
+                "payload": json.loads(payload_json),
+            }
+        )
+
+    return records
+
+
+def history_records(connection, entity_id):
+    entity = connection.execute(
+        """
+        SELECT entity_id
+        FROM entities
+        WHERE entity_id = ?
+        """,
+        (entity_id,),
+    ).fetchone()
+
+    if entity is None:
+        raise ValueError(f"entity not found: {entity_id}")
+
+    records = []
+
+    for (
+        observation_id,
+        provider,
+        discovery_method,
+        discovered_at,
+        received_at,
+        payload_json,
+        correlation_method,
+    ) in entity_observations(connection, entity_id):
+        records.append(
+            {
+                "entity_id": entity_id,
+                "observation_id": observation_id,
+                "provider": provider,
+                "discovery_method": discovery_method,
+                "discovered_at": discovered_at,
+                "received_at": received_at,
+                "correlation_method": correlation_method,
+                "payload": json.loads(payload_json),
+            }
+        )
+
+    return records
+
+
+def emit_records(records):
+    try:
+        for record in records:
+            print(json.dumps(record, separators=(",", ":"), sort_keys=True))
+    except BrokenPipeError:
+        return
+
+
 def main():
-    parser = argparse.ArgumentParser(description="HomeLab Sentinel Living Inventory")
-    parser.add_argument("--database", type=Path, default=DEFAULT_DATABASE, help=f"SQLite database path (default: {DEFAULT_DATABASE})")
+    parser = argparse.ArgumentParser(
+        description="HomeLab Sentinel Living Inventory"
+    )
+
+    parser.add_argument(
+        "--database",
+        type=Path,
+        default=DEFAULT_DATABASE,
+        help=f"SQLite database path (default: {DEFAULT_DATABASE})",
+    )
+
+    parser.add_argument(
+        "command",
+        nargs="?",
+        default="list",
+        choices=("list", "show", "unresolved", "history"),
+        help="Inventory query command (default: list)",
+    )
+
+    parser.add_argument(
+        "entity_id",
+        nargs="?",
+        help="Sentinel entity ID for show or history",
+    )
+
     args = parser.parse_args()
+
+    if args.command in {"show", "history"} and not args.entity_id:
+        parser.error(f"{args.command} requires <entity-id>")
+
+    if args.command in {"list", "unresolved"} and args.entity_id:
+        parser.error(f"{args.command} does not accept <entity-id>")
 
     if not args.database.is_file():
         error(f"Inventory database not found: {args.database}")
@@ -127,9 +295,26 @@ def main():
             version = current_schema_version(connection)
 
             if version < 2:
-                raise ValueError(f"inventory schema version {version} does not support Living Inventory")
+                raise ValueError(
+                    f"inventory schema version {version} "
+                    f"does not support Living Inventory"
+                )
 
-            records = inventory_records(connection)
+            if args.command == "list":
+                records = inventory_records(connection)
+                emit_records(records)
+
+            elif args.command == "show":
+                record = inventory_record(connection, args.entity_id)
+                emit_records([record])
+
+            elif args.command == "unresolved":
+                records = unresolved_records(connection)
+                emit_records(records)
+
+            elif args.command == "history":
+                records = history_records(connection, args.entity_id)
+                emit_records(records)
 
         finally:
             connection.close()
@@ -137,9 +322,6 @@ def main():
     except (sqlite3.Error, ValueError, json.JSONDecodeError) as exc:
         error(f"Living Inventory failed: {exc}")
         return 1
-
-    for record in records:
-        print(json.dumps(record, separators=(",", ":"), sort_keys=True))
 
     return 0
 
