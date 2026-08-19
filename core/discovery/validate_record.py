@@ -62,7 +62,7 @@ def validate_record(record, line_number):
 
     if record["schema_version"] != "1.0":
         return fail(
-            f"unsupported schema_version: {record[schema_version]}",
+            f"unsupported schema_version: {record['schema_version']}",
             line_number,
         )
 
