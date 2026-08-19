@@ -73,7 +73,7 @@ def validate_record(record, line_number):
 
     if record["discovery_method"] != "host-discovery":
         return fail(
-            f"unsupported discovery_method: {record[discovery_method]}",
+            f"unsupported discovery_method: {record["discovery_method"]}",
             line_number,
         )
 

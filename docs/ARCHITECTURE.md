@@ -49,28 +49,30 @@ The goal is to provide a unified experience with minimal manual configuration.
 
 Responsible for:
 
-- Network scanning
-- Device identification
-- Service detection
-- Inventory updates
-- Automatic classification
+- Discovery scope orchestration
+- Discovery provider execution
+- Network and host observation collection
+- Discovery record validation
+- Forwarding validated observations to the Sentinel Core
+
+The Discovery Engine produces observations. It does not assign permanent device identities or write provider-specific results directly into inventory.
 
 ---
 
 ## Inventory
 
-Stores information about every discovered device.
+The Inventory is the Sentinel Core representation of discovered infrastructure.
 
-Example:
+Responsibilities include:
 
-- IP
-- MAC
-- Vendor
-- Hostname
-- Device type
-- Services
-- Operating system
-- Monitoring status
+- Correlating validated observations
+- Maintaining permanent device identities
+- Tracking current device state
+- Preserving historical observations
+- Associating IP addresses, MAC addresses, hostnames, services, and other discovered attributes
+- Supporting device classification and monitoring state
+
+Discovery observations do not become permanent devices until they have been processed by the Core inventory and correlation layers.
 
 ---
 
