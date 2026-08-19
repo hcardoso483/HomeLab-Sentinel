@@ -85,7 +85,14 @@ require_command curl
 [[ -x "${INVENTORY}" ]] || fail "Inventory CLI is not executable: ${INVENTORY}"
 [[ -f "${DATABASE}" ]] || fail "Inventory database not found: ${DATABASE}"
 
-python3 -m py_compile "${SERVER}" "${INVENTORY}"
+python3 - "${SERVER}" "${INVENTORY}" <<'PYTHON'
+from pathlib import Path
+import sys
+
+for filename in sys.argv[1:]:
+    source = Path(filename).read_text(encoding="utf-8")
+    compile(source, filename, "exec")
+PYTHON
 pass "Python syntax"
 
 TMP_DIR="$(mktemp -d)"
