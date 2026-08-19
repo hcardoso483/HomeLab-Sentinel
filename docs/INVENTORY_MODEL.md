@@ -1,6 +1,6 @@
 # HomeLab Sentinel Inventory Model
 
-**Inventory Model Version:** 1.0  
+**Inventory Model Version:** 1.0
 **Status:** Draft
 
 ---
