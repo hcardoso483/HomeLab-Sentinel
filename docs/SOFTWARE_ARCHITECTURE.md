@@ -106,19 +106,99 @@ Each layer has clearly defined responsibilities.
 
 ## User Interface
 
-Responsible for presenting information to users.
+The long-term primary interface for HomeLab Sentinel is the native Sentinel UI.
+
+The Sentinel UI is responsible for presenting HomeLab Sentinel state to users through a coherent, interactive interface.
+
+Primary responsibilities include:
+
+* Overall homelab health summaries
+* Living inventory views
+* Device and host detail views
+* Container and virtual machine status
+* Network traffic summaries
+* Storage and service health
+* Alerts and warnings
+* Historical state and metrics
+* Administration and configuration
+
+The Sentinel UI follows a progressive-detail model.
+
+The default experience should present concise high-level status first.
 
 Examples include:
 
-* Web dashboard
-* Device inventory
-* Alerts
-* Reports
-* Administration
+```text
+Containers        3 / 3 healthy
+Virtual Machines  4 / 4 healthy
+Devices           37 online
+Traffic           ↓ 286 MiB  ↑ 74 MiB
+Storage           68% free
+Alerts            1 warning
+```
 
-The User Interface never communicates directly with infrastructure components.
+Summary elements should be interactive where appropriate.
 
-All communication occurs through the Sentinel Core.
+Selecting a summary should reveal progressively more detailed information.
+
+For example:
+
+```text
+Homelab
+   |
+   v
+Containers
+   |
+   v
+Specific Container
+   |
+   v
+Services / Metrics / Events / History
+```
+
+The interface should allow users to move from overall infrastructure state to the evidence behind that state without overwhelming the initial view.
+
+The Sentinel UI must not discover infrastructure, calculate authoritative infrastructure state independently, or communicate directly with infrastructure components.
+
+It consumes state exposed by the Sentinel Core through stable interfaces such as APIs and events.
+
+Conceptually:
+
+```text
+Providers / Discovery / Monitoring / Integrations
+                         |
+                         v
+                    Sentinel Core
+                         |
+                +--------+--------+
+                |                 |
+               API              Events
+                |                 |
+                +--------+--------+
+                         |
+                         v
+                    Sentinel UI
+```
+
+The Sentinel Core remains authoritative for inventory, health, events, discovery results, monitoring state, and other platform information.
+
+The UI is a presentation layer over Core state.
+
+This separation allows the frontend to evolve without redesigning discovery, inventory, monitoring, deployment, or provider architecture.
+
+External dashboards such as Homepage may remain available as optional presentation modules or integrations.
+
+They are not part of the required long-term Sentinel UI architecture.
+
+The native Sentinel UI should prioritize:
+
+* Simplicity before detail
+* Progressive disclosure
+* Clear health state
+* Explainable status and alerts
+* Consistent navigation from summary to detail
+* Responsive presentation
+* Technology-independent Core interfaces
 
 ---
 
