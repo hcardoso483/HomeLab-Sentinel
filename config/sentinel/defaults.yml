@@ -9,3 +9,4 @@ default_providers:
   metrics: prometheus
   monitoring: prometheus
   dashboard: homepage
+  discovery: nmap

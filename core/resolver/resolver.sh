@@ -158,6 +158,36 @@ except OSError as error:
 PY_DEFAULT
 }
 
+provider_id() {
+    local capability="$1"
+
+    require_configuration >/dev/null || return 1
+
+    local provider
+    provider="$(configured_provider "${capability}")" || return 1
+
+    if [[ -n "${provider}" ]]; then
+        if provider_exists "${capability}" "${provider}"; then
+            echo "${provider}"
+            return 0
+        fi
+
+        return 1
+    fi
+
+    local recommendation
+    recommendation="$(installation_recommendation "${capability}")" || return 1
+
+    if [[ -n "${recommendation}" ]] &&
+       provider_exists "${capability}" "${recommendation}"; then
+        echo "${recommendation}"
+        return 0
+    fi
+
+    return 1
+}
+
+
 resolve_provider() {
     local capability="$1"
 
@@ -263,6 +293,19 @@ case "${1:-}" in
 
         resolve_provider "${2}"
         ;;
+
+
+    provider-id)
+        if [[ -z "${2:-}" ]]; then
+            log_error "Missing capability."
+            echo "[SUGGESTION] Usage:"
+            echo "  ${0} provider-id <capability>"
+            exit 1
+        fi
+
+        provider_id "${2}"
+        ;;
+
 
     *)
         usage
