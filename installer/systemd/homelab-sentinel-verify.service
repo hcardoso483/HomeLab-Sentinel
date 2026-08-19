@@ -1,0 +1,15 @@
+[Unit]
+Description=HomeLab Sentinel post-boot verification
+After=local-fs.target
+ConditionPathExists=/opt/homelab-sentinel/app/scripts/verify-sentinel.sh
+
+[Service]
+Type=oneshot
+User=hugo
+Group=hugo
+WorkingDirectory=/opt/homelab-sentinel/app
+ExecStart=/opt/homelab-sentinel/app/scripts/verify-sentinel.sh
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target
