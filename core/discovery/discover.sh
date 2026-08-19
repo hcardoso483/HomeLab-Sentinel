@@ -7,7 +7,7 @@ APP_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 source "${APP_ROOT}/core/lib/common.sh"
 
-SCOPE_CONFIG="${APP_ROOT}/config/sentinel/discovery-scopes.yml"
+SCOPE_CONFIG="${1:-${APP_ROOT}/config/sentinel/discovery-scopes.yml}"
 SCOPE_HELPER="${APP_ROOT}/core/discovery/scopes.py"
 RESOLVER="${APP_ROOT}/core/resolver/resolver.sh"
 RECORD_VALIDATOR="${APP_ROOT}/core/discovery/validate_record.py"
