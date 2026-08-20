@@ -10,6 +10,7 @@ SYSTEMD_TARGET="/etc/systemd/system"
 API_UNIT="homelab-sentinel-api.service"
 VERIFY_UNIT="homelab-sentinel-verify.service"
 
+DEPENDENCY_MANAGER="${SCRIPT_DIR}/dependencies.py"
 API_HEALTH_URL="http://127.0.0.1:8000/api/v1/health"
 
 log_info() {
@@ -71,6 +72,11 @@ echo "HomeLab Sentinel Platform Bootstrap"
 echo
 
 require_root
+
+require_file "${DEPENDENCY_MANAGER}"
+
+log_info "Checking mandatory Sentinel dependencies..."
+"${DEPENDENCY_MANAGER}" --recover
 
 require_command systemctl
 require_command install
