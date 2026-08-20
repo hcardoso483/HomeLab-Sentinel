@@ -4,7 +4,8 @@ set -Eeuo pipefail
 APP_ROOT="${APP_ROOT:-/opt/homelab-sentinel/app}"
 DATABASE="${DATABASE:-/srv/homelab-sentinel/sentinel/inventory.db}"
 REGRESSION_TEST="${REGRESSION_TEST:-${APP_ROOT}/tests/test_core_api.sh}"
-API_PROCESS_PATTERN="${API_PROCESS_PATTERN:-[a]pi/server.py}"
+TEST_API_PORT="${TEST_API_PORT:-18000}"
+API_PROCESS_PATTERN="${API_PROCESS_PATTERN:-[a]pi/server.py.*--port ${TEST_API_PORT}}"
 
 FAILURES=0
 PROCESS_FILE=""
@@ -162,7 +163,7 @@ fi
 section "CORE API REGRESSION"
 
 if [[ -x "${REGRESSION_TEST}" ]]; then
-    if "${REGRESSION_TEST}"; then
+    if API_PORT="${TEST_API_PORT}" "${REGRESSION_TEST}"; then
         pass "Core API regression suite"
     else
         fail "Core API regression suite"
