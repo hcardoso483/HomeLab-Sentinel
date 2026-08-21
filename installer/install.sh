@@ -11,6 +11,7 @@ API_UNIT="homelab-sentinel-api.service"
 VERIFY_UNIT="homelab-sentinel-verify.service"
 
 DEPENDENCY_MANAGER="${SCRIPT_DIR}/dependencies.py"
+INVENTORY_MANAGER="${SCRIPT_DIR}/inventory.py"
 API_HEALTH_URL="http://127.0.0.1:8000/api/v1/health"
 
 log_info() {
@@ -74,9 +75,13 @@ echo
 require_root
 
 require_file "${DEPENDENCY_MANAGER}"
+require_file "${INVENTORY_MANAGER}"
 
 log_info "Checking mandatory Sentinel dependencies..."
 "${DEPENDENCY_MANAGER}" --recover
+
+log_info "Preparing Sentinel inventory state..."
+"${INVENTORY_MANAGER}"
 
 require_command systemctl
 require_command install

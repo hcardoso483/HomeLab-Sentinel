@@ -135,23 +135,23 @@ They are distinct from module-specific dependencies.
 
 Bootstrap v2 currently manages:
 
-  ------------------------------------------------------------------------
-  Sentinel capability     Debian 13 recovery       Purpose
-                          package
-  ----------------------- ------------------------ -----------------------
-  `python3` command       `python3`                Sentinel Core and
-                                                   platform Python runtime
+  -----------------------------------------------------------------------
+  Sentinel capability    Debian 13 recovery       Purpose
+                         package
+  ---------------------- ------------------------ -----------------------
+  `python3` command      `python3`                Sentinel Core and
+                                                  platform Python runtime
 
-  `curl` command          `curl`                   Bootstrap and health
-                                                   endpoint verification
+  `curl` command         `curl`                   Bootstrap and health
+                                                  endpoint verification
 
-  Python `yaml` import    `python3-yaml`           Module metadata and
-                                                   deployment processing
+  Python `yaml` import   `python3-yaml`           Module metadata and
+                                                  deployment processing
 
-  Python `sqlite3` import `libpython3.13-stdlib`   Living Inventory and
-                                                   Core API database
-                                                   access
-  ------------------------------------------------------------------------
+  Python `sqlite3`       `libpython3.13-stdlib`   Living Inventory and
+  import                                          Core API database
+                                                  access
+  -----------------------------------------------------------------------
 
 The SQLite requirement is the Python SQLite capability used by Sentinel.
 The standalone `sqlite3` command-line package is not currently a
@@ -291,6 +291,129 @@ normal installation.
 
 Simulation exists as a deliberate regression and recovery-testing
 facility, not as hidden production behavior.
+
+------------------------------------------------------------------------
+
+## Inventory State Management
+
+Platform Bootstrap prepares the authoritative Sentinel inventory state
+before the Core API is started.
+
+The platform-level inventory state manager is:
+
+``` text
+installer/inventory.py
+```
+
+The inventory manager does not implement Sentinel database schemas or
+migrations itself. Schema ownership remains with the Inventory
+subsystem.
+
+The authoritative initialization and migration path is:
+
+``` text
+core/inventory/store.py
+```
+
+This preserves the architectural boundary:
+
+> Platform Bootstrap determines that required Sentinel state is ready.
+> The Inventory subsystem determines how inventory state is created and
+> migrated.
+
+### Missing Inventory Database
+
+When the configured inventory database does not exist, the inventory
+manager:
+
+1.  Reports the missing state as recoverable.
+2.  Invokes `core/inventory/store.py` with an empty input stream.
+3.  Allows the Inventory Store to create the required parent directory.
+4.  Initializes the base inventory schema.
+5.  Applies all required sequential inventory migrations.
+6.  Confirms that the database file was created.
+7.  Verifies the resulting schema version.
+8.  Runs SQLite integrity verification.
+9.  Allows Bootstrap to continue only when verification passes.
+
+The default inventory database is:
+
+``` text
+/srv/homelab-sentinel/sentinel/inventory.db
+```
+
+The currently verified clean initialization path is:
+
+``` text
+No inventory database
+        |
+        v
+Inventory Store creates database
+        |
+        v
+Base schema initialized
+user_version = 1
+        |
+        v
+Migration 002 applied
+user_version = 2
+        |
+        v
+SQLite integrity_check
+        |
+        +-- PASS --> Inventory state ready
+        |
+        +-- FAIL --> Bootstrap stops
+```
+
+Clean initialization has been tested against a temporary empty path and
+produces schema version 2 with the expected inventory tables and an
+`integrity_check` result of `ok`.
+
+### Existing Inventory Database
+
+When the inventory database already exists, the inventory manager does
+not reinitialize it.
+
+Instead it:
+
+1.  Opens the database in read-only mode for verification.
+2.  Reads `PRAGMA user_version`.
+3.  Confirms that the schema version is supported.
+4.  Runs `PRAGMA integrity_check`.
+5.  Reports the inventory state as ready only when verification
+    succeeds.
+
+Repeated Platform Bootstrap execution has been verified against the
+existing live inventory without changing its inventory counts or
+reinitializing its contents.
+
+This establishes idempotent inventory-state behavior:
+
+``` text
+missing database
+    -> initialize
+    -> migrate
+    -> verify
+    -> ready
+
+existing database
+    -> verify only
+    -> preserve data
+    -> ready
+```
+
+### Failure Boundary
+
+Inventory state must be valid before the Core API service is installed,
+started, or restarted as part of the bootstrap sequence.
+
+If initialization fails, the database is not created as expected, the
+schema version is unsupported, or SQLite integrity verification fails,
+the inventory manager exits unsuccessfully and Platform Bootstrap stops.
+
+The Core API must not be treated as successfully deployed on top of
+invalid Sentinel inventory state.
 
 ------------------------------------------------------------------------
 
@@ -474,8 +597,6 @@ The current bootstrap does not yet:
 
 -   Clone or download the HomeLab Sentinel repository.
 -   Install or configure Git.
--   Create the Sentinel inventory database.
--   Initialize the inventory schema.
 -   Deploy Sentinel modules.
 -   Configure host networking.
 -   Configure firewall rules.
