@@ -417,9 +417,87 @@ invalid Sentinel inventory state.
 
 ------------------------------------------------------------------------
 
+
+## Platform Service Identity
+
+HomeLab Sentinel separates installation privileges from runtime privileges.
+
+Platform installation is performed with root privileges because Bootstrap
+must be able to install packages, prepare platform state, install systemd
+units, create system identities, and enable services.
+
+Long-running Sentinel services must not depend on the identity of the human
+administrator who installed the platform.
+
+The canonical runtime service identity is:
+
+```text
+homelab-sentinel
+```
+
+The account is declared by:
+
+```text
+installer/sysusers.d/homelab-sentinel.conf
+```
+
+Bootstrap installs the declaration to:
+
+```text
+/etc/sysusers.d/homelab-sentinel.conf
+```
+
+and ensures the identity exists using `systemd-sysusers`.
+
+The account is intentionally non-interactive:
+
+```text
+home:  /nonexistent
+shell: /usr/sbin/nologin
+```
+
+Bootstrap creates `/etc/sysusers.d` when necessary before installing the
+declaration.
+
+The service identity has been validated running both:
+
+- HomeLab Sentinel Core API.
+- HomeLab Sentinel post-boot verification.
+
+The canonical systemd units therefore use:
+
+```text
+User=homelab-sentinel
+Group=homelab-sentinel
+```
+
+Application code remains administrator-owned under:
+
+```text
+/opt/homelab-sentinel/app
+```
+
+Runtime services require only the permissions necessary to read and execute
+the current Core implementation.
+
+Persistent Sentinel state remains under:
+
+```text
+/srv/homelab-sentinel
+```
+
+The platform must not require a human account such as the original installer
+user to exist after installation.
+
+---
+
 ## Responsibilities
 
 The current Platform Bootstrap:
+
+In addition to dependency and inventory-state management, the platform now
+establishes the dedicated `homelab-sentinel` runtime identity and installs the
+canonical `hls` administrative CLI.
 
 1.  Requires root privileges.
 2.  Validates the supported host.
@@ -463,6 +541,138 @@ Installed unit files are deployed to:
 ```
 
 ------------------------------------------------------------------------
+
+
+## HLS Command-Line Interface
+
+The canonical administrative interface for HomeLab Sentinel is:
+
+```text
+hls
+```
+
+Bootstrap installs the version-controlled CLI from:
+
+```text
+installer/hls
+```
+
+to:
+
+```text
+/usr/local/bin/hls
+```
+
+Users should interact with HomeLab Sentinel through `hls` rather than needing
+to know internal repository script paths.
+
+The currently implemented commands are:
+
+```text
+hls help
+hls status
+hls verify
+hls inventory [arguments...]
+sudo hls install
+```
+
+### Install / Reconciliation
+
+On an existing HomeLab Sentinel installation:
+
+```text
+sudo hls install
+```
+
+invokes the Platform Bootstrap and converges the system toward the desired
+Sentinel platform state.
+
+The verified flow includes:
+
+```text
+mandatory dependency validation/recovery
+        |
+        v
+inventory state preparation
+        |
+        v
+service identity enforcement
+        |
+        v
+HLS CLI installation
+        |
+        v
+systemd unit deployment
+        |
+        v
+Core API startup
+        |
+        v
+health verification
+        |
+        v
+full Sentinel verification
+```
+
+Repeated execution through `sudo hls install` has been verified to remain
+idempotent.
+
+### Status
+
+```text
+hls status
+```
+
+reports the Core API service state, post-boot verification enablement, and Core
+API health.
+
+### Verification
+
+```text
+hls verify
+```
+
+executes the complete Sentinel verification suite.
+
+### Inventory
+
+```text
+hls inventory
+```
+
+delegates to the authoritative Living Inventory CLI.
+
+### First-Install Direction
+
+The long-term goal is for the same `hls` interface to act as the first-install
+front door.
+
+Before HomeLab Sentinel exists locally, a standalone bootstrap form of `hls`
+may provide:
+
+```text
+obtain bootstrap hls
+        |
+        v
+sudo ./hls install
+        |
+        v
+acquire HomeLab Sentinel
+        |
+        v
+install under /opt/homelab-sentinel/app
+        |
+        v
+run Platform Bootstrap
+        |
+        v
+install permanent /usr/local/bin/hls
+```
+
+Repository acquisition is not yet implemented. Until it is, this remains a
+future installation direction rather than current Bootstrap behavior.
+
+---
 
 ## Core API
 
@@ -597,6 +807,8 @@ The current bootstrap does not yet:
 
 -   Clone or download the HomeLab Sentinel repository.
 -   Install or configure Git.
+-   Create the Sentinel inventory database.
+-   Initialize the inventory schema.
 -   Deploy Sentinel modules.
 -   Configure host networking.
 -   Configure firewall rules.
@@ -614,6 +826,11 @@ The long-term installation objective is:
 
 ``` text
 Supported clean Debian installation
+              |
+              v
+      Bootstrap HLS entry point
+              |
+              v
               |
               v
       Platform Bootstrap

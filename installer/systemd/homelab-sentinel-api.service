@@ -6,8 +6,8 @@ ConditionPathExists=/srv/homelab-sentinel/sentinel/inventory.db
 
 [Service]
 Type=simple
-User=hugo
-Group=hugo
+User=homelab-sentinel
+Group=homelab-sentinel
 WorkingDirectory=/opt/homelab-sentinel/app
 ExecStart=/opt/homelab-sentinel/app/api/server.py --host 127.0.0.1 --port 8000 --database /srv/homelab-sentinel/sentinel/inventory.db
 Restart=on-failure
