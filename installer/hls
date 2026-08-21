@@ -1,25 +1,38 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-APP_ROOT="/opt/homelab-sentinel/app"
+INSTALL_ROOT="/opt/homelab-sentinel"
+APP_ROOT="${INSTALL_ROOT}/app"
+
+REPO_URL="https://github.com/hcardoso483/HomeLab-Sentinel.git"
+REPO_BRANCH="main"
 
 usage() {
     cat <<'EOF_USAGE'
 HomeLab Sentinel CLI
 
 Usage:
-  hls install
+  hls install [--test-root PATH] [--simulate-invalid-tree]
   hls status
   hls verify
   hls inventory [arguments...]
   hls help
 
 Commands:
-  install     Run the HomeLab Sentinel platform bootstrap
+  install     Install or reconcile the HomeLab Sentinel platform
   status      Show Core service and API status
   verify      Run the complete Sentinel verification suite
   inventory   Query the Living Inventory
   help        Show this help
+
+Install options:
+  --test-root PATH
+              TEST ONLY: perform first-install acquisition under PATH.
+              PATH must be under /tmp. Platform Bootstrap is not executed.
+
+  --simulate-invalid-tree
+              TEST ONLY: after acquisition, remove one required Sentinel file
+              before validation to prove rollback behavior.
 EOF_USAGE
 }
 
@@ -30,35 +43,206 @@ require_file() {
     }
 }
 
+validate_acquired_tree() {
+    local app_root="$1"
+    local required
+
+    for required in \
+        installer/install.sh \
+        installer/dependencies.py \
+        installer/inventory.py \
+        installer/hls \
+        installer/systemd/homelab-sentinel-api.service \
+        installer/systemd/homelab-sentinel-verify.service \
+        installer/sysusers.d/homelab-sentinel.conf \
+        api/server.py \
+        scripts/verify-sentinel.sh; do
+        if [[ ! -f "${app_root}/${required}" ]]; then
+            echo "[ERROR] Acquired Sentinel tree is incomplete: ${required}" >&2
+            return 1
+        fi
+    done
+
+    echo "[PASS] Acquired HomeLab Sentinel tree validated."
+}
+
+ensure_git() {
+    if command -v git >/dev/null 2>&1; then
+        echo "[PASS] Git available."
+        return 0
+    fi
+
+    command -v apt-get >/dev/null 2>&1 || {
+        echo "[ERROR] Git is missing and apt-get is unavailable." >&2
+        return 1
+    }
+
+    echo "[RECOVER] Git is missing."
+    echo "[INFO] Installing Git..."
+
+    export DEBIAN_FRONTEND=noninteractive
+
+    if ! apt-get update; then
+        echo "[ERROR] Unable to refresh APT package metadata." >&2
+        return 1
+    fi
+
+    if ! apt-get install -y git; then
+        echo "[ERROR] Git installation failed." >&2
+        return 1
+    fi
+
+    command -v git >/dev/null 2>&1 || {
+        echo "[ERROR] Git recovery completed but Git is still unavailable." >&2
+        return 1
+    }
+
+    echo "[PASS] Git recovered and verified."
+}
+
+acquire_sentinel() {
+    local install_root="$1"
+    local simulate_invalid_tree="${2:-false}"
+    local app_root="${install_root}/app"
+    local staging
+
+    mkdir -p "${install_root}"
+
+    if [[ -e "${app_root}" ]]; then
+        echo "[ERROR] Installation target already exists: ${app_root}" >&2
+        return 1
+    fi
+
+    staging="$(mktemp -d "${install_root}/.bootstrap-XXXXXX")"
+
+    cleanup_acquisition() {
+        rm -rf "${staging}"
+    }
+
+    echo "[INFO] Acquiring HomeLab Sentinel..."
+    echo "[INFO] Source: ${REPO_URL}"
+    echo "[INFO] Branch: ${REPO_BRANCH}"
+
+    if ! git clone \
+        --branch "${REPO_BRANCH}" \
+        --single-branch \
+        "${REPO_URL}" \
+        "${staging}/app"; then
+        echo "[ERROR] HomeLab Sentinel acquisition failed." >&2
+        cleanup_acquisition
+        return 1
+    fi
+
+    if [[ "${simulate_invalid_tree}" == "true" ]]; then
+        echo "[TEST] Simulating invalid acquired Sentinel tree."
+        rm -f "${staging}/app/installer/install.sh"
+    fi
+
+    if ! validate_acquired_tree "${staging}/app"; then
+        cleanup_acquisition
+        return 1
+    fi
+
+    if ! mv "${staging}/app" "${app_root}"; then
+        echo "[ERROR] Unable to activate acquired HomeLab Sentinel tree." >&2
+        cleanup_acquisition
+        return 1
+    fi
+
+    cleanup_acquisition
+
+    echo "[PASS] HomeLab Sentinel acquired: ${app_root}"
+}
+
 command_install() {
+    local test_root=""
+    local simulate_invalid_tree=false
+
     if [[ "${EUID}" -ne 0 ]]; then
         echo "[ERROR] Installation requires root privileges." >&2
         echo "[SUGGESTION] Run: sudo hls install" >&2
         exit 1
     fi
 
+    while (( $# > 0 )); do
+        case "$1" in
+            --test-root)
+                [[ $# -ge 2 ]] || {
+                    echo "[ERROR] --test-root requires a path." >&2
+                    exit 1
+                }
+                test_root="$2"
+                shift 2
+                ;;
+            --simulate-invalid-tree)
+                simulate_invalid_tree=true
+                shift
+                ;;
+            *)
+                echo "[ERROR] Unknown install option: $1" >&2
+                exit 1
+                ;;
+        esac
+    done
+
+    if [[ "${simulate_invalid_tree}" == "true" && -z "${test_root}" ]]; then
+        echo "[ERROR] --simulate-invalid-tree requires --test-root." >&2
+        exit 1
+    fi
+
+    if [[ -n "${test_root}" ]]; then
+        case "${test_root}" in
+            /tmp/*) ;;
+            *)
+                echo "[ERROR] Test root must be under /tmp." >&2
+                exit 1
+                ;;
+        esac
+
+        echo "[TEST] First-install acquisition test mode enabled."
+        echo "[TEST] Root: ${test_root}"
+
+        rm -rf "${test_root}"
+        ensure_git
+        acquire_sentinel "${test_root}" "${simulate_invalid_tree}"
+
+        echo "[PASS] First-install acquisition test completed."
+        echo "[TEST] Platform Bootstrap was not executed."
+        return 0
+    fi
+
     local installer="${APP_ROOT}/installer/install.sh"
+
+    if [[ -f "${installer}" ]]; then
+        echo "[INFO] Existing HomeLab Sentinel installation detected."
+        exec "${installer}"
+    fi
+
+    echo "[INFO] HomeLab Sentinel is not installed."
+    echo "[INFO] Entering first-install mode."
+
+    ensure_git
+    acquire_sentinel "${INSTALL_ROOT}"
+
+    installer="${APP_ROOT}/installer/install.sh"
     require_file "${installer}"
 
+    echo "[INFO] Handing control to Platform Bootstrap..."
     exec "${installer}"
 }
 
 command_status() {
     echo "HomeLab Sentinel status"
     echo
-
     echo "Core API service:"
     systemctl is-enabled homelab-sentinel-api.service 2>/dev/null || true
     systemctl is-active homelab-sentinel-api.service 2>/dev/null || true
-
     echo
     echo "Post-boot verification service:"
     systemctl is-enabled homelab-sentinel-verify.service 2>/dev/null || true
-
     echo
     echo "Core API health:"
-    if curl --fail --silent --max-time 5 \
-        http://127.0.0.1:8000/api/v1/health; then
+    if curl --fail --silent --max-time 5 http://127.0.0.1:8000/api/v1/health; then
         echo
     else
         echo "[ERROR] Core API healthcheck failed." >&2
@@ -69,40 +253,27 @@ command_status() {
 command_verify() {
     local verifier="${APP_ROOT}/scripts/verify-sentinel.sh"
     require_file "${verifier}"
-
     exec "${verifier}"
 }
 
 command_inventory() {
     local inventory="${APP_ROOT}/core/inventory/inventory.py"
     require_file "${inventory}"
-
     exec "${inventory}" "$@"
 }
 
 main() {
     local command="${1:-help}"
-
     if (( $# > 0 )); then
         shift
     fi
 
     case "${command}" in
-        install)
-            command_install "$@"
-            ;;
-        status)
-            command_status "$@"
-            ;;
-        verify)
-            command_verify "$@"
-            ;;
-        inventory)
-            command_inventory "$@"
-            ;;
-        help|-h|--help)
-            usage
-            ;;
+        install) command_install "$@" ;;
+        status) command_status "$@" ;;
+        verify) command_verify "$@" ;;
+        inventory) command_inventory "$@" ;;
+        help|-h|--help) usage ;;
         *)
             echo "[ERROR] Unknown command: ${command}" >&2
             echo

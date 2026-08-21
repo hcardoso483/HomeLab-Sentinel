@@ -92,8 +92,8 @@ contract.
 
 The current bootstrap assumes:
 
--   The HomeLab Sentinel application tree already exists.
--   The application tree is located at `/opt/homelab-sentinel/app`.
+-   Existing-install mode uses the application tree at `/opt/homelab-sentinel/app`.
+-   First-install mode acquires the application tree before Platform Bootstrap runs.
 -   The Sentinel inventory database already exists.
 -   The host is a supported Debian 13 system.
 -   The host provides systemd.
@@ -642,25 +642,44 @@ hls inventory
 
 delegates to the authoritative Living Inventory CLI.
 
-### First-Install Direction
+### First-Install Acquisition
 
-The long-term goal is for the same `hls` interface to act as the first-install
-front door.
+The same `hls install` interface now supports two installation states.
 
-Before HomeLab Sentinel exists locally, a standalone bootstrap form of `hls`
-may provide:
+When `/opt/homelab-sentinel/app` already contains HomeLab Sentinel, `hls
+install` enters existing-install mode and invokes the Platform Bootstrap to
+reconcile and verify the installed platform.
+
+When HomeLab Sentinel is not yet installed, the standalone bootstrap form of
+`hls` enters first-install acquisition mode.
+
+The first-install flow is:
 
 ```text
-obtain bootstrap hls
+standalone bootstrap hls
         |
         v
 sudo ./hls install
         |
         v
-acquire HomeLab Sentinel
+ensure Git is available
         |
         v
-install under /opt/homelab-sentinel/app
+acquire canonical repository over HTTPS
+        |
+        v
+clone main branch into temporary staging
+        |
+        v
+validate required Sentinel tree
+        |
+        +-- FAIL --> remove staging --> stop
+        |
+        v
+activate /opt/homelab-sentinel/app
+        |
+        v
+remove staging
         |
         v
 run Platform Bootstrap
@@ -669,8 +688,161 @@ run Platform Bootstrap
 install permanent /usr/local/bin/hls
 ```
 
-Repository acquisition is not yet implemented. Until it is, this remains a
-future installation direction rather than current Bootstrap behavior.
+The canonical acquisition source is:
+
+```text
+https://github.com/hcardoso483/HomeLab-Sentinel.git
+```
+
+and the currently selected acquisition branch is:
+
+```text
+main
+```
+
+HTTPS is deliberately used for first installation so acquisition does not
+depend on a preconfigured SSH key or GitHub SSH credentials.
+
+#### Acquisition Staging and Validation
+
+Repository contents are not cloned directly into the final application path.
+First-install acquisition creates a temporary `.bootstrap-*` staging directory
+under the selected installation root and clones the repository there.
+
+Before activation, `hls` validates that the acquired tree contains the
+required platform components, including the installer, dependency manager,
+inventory state manager, HLS CLI, systemd units, service identity declaration,
+Core API server, and Sentinel verification script.
+
+Only a tree that passes validation may be moved into the final application
+path.
+
+The final application path must not already exist when first-install
+acquisition attempts activation. An existing installation is handled through
+the existing-install reconciliation path instead.
+
+#### Transactional Failure Boundary
+
+Acquisition is treated as a transactional operation.
+
+The verified successful path is:
+
+```text
+clone
+  |
+  v
+validate
+  |
+  v
+activate
+  |
+  v
+cleanup staging
+  |
+  v
+acquisition complete
+```
+
+The clone-failure path has been explicitly tested:
+
+```text
+clone fails
+  |
+  v
+report acquisition failure
+  |
+  v
+cleanup staging
+  |
+  v
+no application installed
+```
+
+The validation-failure path has also been explicitly tested:
+
+```text
+clone succeeds
+  |
+  v
+acquired tree fails validation
+  |
+  v
+cleanup staging
+  |
+  v
+no application installed
+```
+
+In both tested failure paths, no final `app` tree is created and no
+`.bootstrap-*` staging directory remains.
+
+#### First-Install Test Mode
+
+First-install acquisition provides an explicit test-only root override:
+
+```text
+--test-root PATH
+```
+
+The test root must be under `/tmp`.
+
+Test mode performs acquisition, staging, validation, activation, and cleanup
+under the temporary root but deliberately does not execute Platform Bootstrap.
+This allows acquisition behavior to be exercised without replacing or
+reconfiguring the live Sentinel installation.
+
+A successful acquisition test has been verified to produce a checkout with:
+
+```text
+remote: https://github.com/hcardoso483/HomeLab-Sentinel.git
+branch: main
+```
+
+while leaving the live application tree unchanged.
+
+#### Invalid-Tree Simulation
+
+Validation rollback can be exercised through the explicit test-only option:
+
+```text
+--simulate-invalid-tree
+```
+
+This option is accepted only together with `--test-root`.
+
+After a successful clone, simulation deliberately removes a required Sentinel
+file from the staged checkout before validation. Validation must then reject
+the acquired tree, acquisition must exit unsuccessfully, staging must be
+removed, and no final application tree may be activated.
+
+Simulation exists only to prove the rollback contract. It is not part of
+normal production installation behavior.
+
+#### Dual-Mode Install Contract
+
+The resulting `hls install` behavior is:
+
+```text
+HomeLab Sentinel absent
+        |
+        +--> first-install acquisition
+                |
+                +--> acquire
+                +--> validate
+                +--> activate
+                +--> Platform Bootstrap
+
+HomeLab Sentinel present
+        |
+        +--> existing-install reconciliation
+                |
+                +--> Platform Bootstrap
+                +--> verify desired platform state
+```
+
+Existing-install mode has been regression-tested after introduction of the
+first-install acquisition logic and continues to complete the full Platform
+Bootstrap and Sentinel verification suite successfully.
 
 ---
 
@@ -805,10 +977,7 @@ Sentinel platform itself.
 
 The current bootstrap does not yet:
 
--   Clone or download the HomeLab Sentinel repository.
--   Install or configure Git.
--   Create the Sentinel inventory database.
--   Initialize the inventory schema.
+-   Configure Git credentials or user identity.
 -   Deploy Sentinel modules.
 -   Configure host networking.
 -   Configure firewall rules.
@@ -831,6 +1000,7 @@ Supported clean Debian installation
       Bootstrap HLS entry point
               |
               v
+      First-install acquisition / existing-install reconciliation
               |
               v
       Platform Bootstrap
