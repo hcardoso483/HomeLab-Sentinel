@@ -623,8 +623,114 @@ idempotent.
 hls status
 ```
 
-reports the Core API service state, post-boot verification enablement, and Core
-API health.
+delegates platform status evaluation to the dedicated read-only status engine:
+
+```text
+core/status/status.py
+```
+
+The status engine observes the installed Sentinel platform and reports its
+current operational state. It does not install packages, initialize inventory
+state, start or restart services, change permissions, repair configuration, or
+otherwise reconcile the platform.
+
+This preserves the command boundary:
+
+```text
+hls status
+    -> observe and classify current platform state
+
+sudo hls install
+    -> reconcile the platform toward desired state
+
+hls verify
+    -> execute the complete Sentinel verification suite
+```
+
+The current status report evaluates:
+
+-   Application installation state.
+-   Canonical `homelab-sentinel` service identity.
+-   Core API systemd service state.
+-   Core API runtime identity.
+-   Core API health endpoint.
+-   Inventory database presence and readability.
+-   Inventory schema version.
+-   SQLite integrity.
+-   Post-boot verification unit enablement.
+
+The status engine uses three overall states with stable process exit codes:
+
+```text
+READY          exit 0
+DEGRADED       exit 1
+NOT INSTALLED  exit 2
+```
+
+`READY` means the observed platform checks required by the current status
+contract are healthy.
+
+`DEGRADED` means Sentinel is present, or platform remnants indicate that it
+should be present, but one or more observed components are missing, unhealthy,
+incorrect, or unsupported.
+
+`NOT INSTALLED` represents clean platform absence. Components that do not apply
+to a clean uninstalled system are reported as `N/A` rather than being presented
+as failures.
+
+This distinction is intentional:
+
+```text
+clean platform absence
+        -> NOT INSTALLED
+
+installed, partial, inconsistent, or unhealthy platform
+        -> DEGRADED
+```
+
+Status evaluation is deliberately read-only. In particular, inventory
+inspection opens the database read-only and must not invoke the inventory state
+manager, because `installer/inventory.py` is allowed to initialize missing state
+during platform reconciliation.
+
+#### Status Failure-State Testing
+
+The status engine provides an explicit test-only simulation interface:
+
+```text
+--simulate CONDITION
+```
+
+The currently supported simulated conditions are:
+
+```text
+wrong-runtime-identity
+missing-database
+unsupported-schema
+not-installed
+```
+
+Simulation allows status classification and exit-code behavior to be exercised
+without damaging the live Sentinel installation.
+
+The verified simulation matrix is:
+
+```text
+normal                   -> READY          -> exit 0
+wrong-runtime-identity   -> DEGRADED       -> exit 1
+missing-database         -> DEGRADED       -> exit 1
+unsupported-schema       -> DEGRADED       -> exit 1
+not-installed            -> NOT INSTALLED  -> exit 2
+```
+
+Live degraded-state testing has also verified that stopping the Core API reports
+the service as `INACTIVE`, health as `UNHEALTHY`, overall state as `DEGRADED`,
+and exit code 1. Disabling the post-boot verification unit reports it as
+`DISABLED`, overall state as `DEGRADED`, and exit code 1. Restoring each live
+condition returns the platform to `READY`.
+
+The simulation interface exists only for controlled regression testing. It does
+not alter production state and is not used by normal `hls status` execution.
 
 ### Verification
 

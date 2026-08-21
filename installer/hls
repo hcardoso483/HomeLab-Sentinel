@@ -232,22 +232,10 @@ command_install() {
 }
 
 command_status() {
-    echo "HomeLab Sentinel status"
-    echo
-    echo "Core API service:"
-    systemctl is-enabled homelab-sentinel-api.service 2>/dev/null || true
-    systemctl is-active homelab-sentinel-api.service 2>/dev/null || true
-    echo
-    echo "Post-boot verification service:"
-    systemctl is-enabled homelab-sentinel-verify.service 2>/dev/null || true
-    echo
-    echo "Core API health:"
-    if curl --fail --silent --max-time 5 http://127.0.0.1:8000/api/v1/health; then
-        echo
-    else
-        echo "[ERROR] Core API healthcheck failed." >&2
-        return 1
-    fi
+    local status_engine="${APP_ROOT}/core/status/status.py"
+    require_file "${status_engine}"
+
+    exec "${status_engine}"
 }
 
 command_verify() {
