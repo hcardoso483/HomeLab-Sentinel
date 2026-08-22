@@ -10,6 +10,8 @@ from pathlib import Path
 
 
 DEFAULT_DATABASE = Path("/srv/homelab-sentinel/sentinel/inventory.db")
+GLOBAL_MAC_CONFIDENCE = 0.90
+LOCAL_MAC_CONFIDENCE = 0.60
 
 
 def info(message):
@@ -53,6 +55,11 @@ def entities_for_mac(connection, mac_address):
     ).fetchall()
 
     return [row[0] for row in rows]
+
+
+def mac_is_locally_administered(mac_address):
+    first_octet = int(mac_address.split(":", 1)[0], 16)
+    return bool(first_octet & 0x02)
 
 
 def create_entity(connection):
@@ -167,6 +174,16 @@ def correlate_observation(connection, observation_id, payload_json):
         return "unresolved", None
 
     matches = entities_for_mac(connection, mac_address)
+    local_mac = mac_is_locally_administered(mac_address)
+
+    if local_mac:
+        new_method = "new-entity-local-mac-evidence"
+        match_method = "local-mac-history-match"
+        confidence = LOCAL_MAC_CONFIDENCE
+    else:
+        new_method = "new-entity-mac-evidence"
+        match_method = "mac-history-match"
+        confidence = GLOBAL_MAC_CONFIDENCE
 
     if len(matches) == 0:
         entity_id = create_entity(connection)
@@ -175,8 +192,8 @@ def correlate_observation(connection, observation_id, payload_json):
             connection,
             observation_id,
             entity_id,
-            "new-entity-mac-evidence",
-            0.90,
+            new_method,
+            confidence,
         )
 
         return "new", entity_id
@@ -188,8 +205,8 @@ def correlate_observation(connection, observation_id, payload_json):
             connection,
             observation_id,
             entity_id,
-            "mac-history-match",
-            0.90,
+            match_method,
+            confidence,
         )
 
         return "resolved", entity_id
