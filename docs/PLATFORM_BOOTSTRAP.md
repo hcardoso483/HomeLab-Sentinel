@@ -544,6 +544,83 @@ Installed unit files are deployed to:
 
 ------------------------------------------------------------------------
 
+### Core API Boot Readiness
+
+Core API process startup and Core API readiness are intentionally treated as
+separate states.
+
+The Core API systemd unit starts the API process and then executes:
+
+``` text
+scripts/wait-core-api.sh
+```
+
+through `ExecStartPost`.
+
+The readiness helper polls the Core API health endpoint:
+
+``` text
+http://127.0.0.1:8000/api/v1/health
+```
+
+and requires a successful health response before the Core API unit is considered
+successfully started.
+
+This creates the boot ordering contract:
+
+``` text
+Core API process starts
+        |
+        v
+wait for health endpoint
+        |
+        +-- timeout/failure --> API unit startup fails
+        |
+        v
+record boot readiness
+        |
+        v
+Core API unit startup completes
+        |
+        v
+post-boot verification starts
+```
+
+The post-boot verification unit declares both `After=` and `Requires=` on the
+Core API service. Verification therefore waits behind the Core API readiness
+gate rather than racing the API during system boot.
+
+Successful readiness creates the runtime marker:
+
+``` text
+/run/homelab-sentinel/boot-ready
+```
+
+The marker records:
+
+``` text
+BOOT_ID=<current kernel boot ID>
+API_READY=1
+READY_AT=<UTC readiness timestamp>
+API_URL=http://127.0.0.1:8000/api/v1/health
+```
+
+The boot ID ties the readiness record to the current system boot. The runtime
+directory is managed by systemd and is not persistent across reboot.
+
+The readiness helper removes any existing readiness marker before beginning a
+new readiness attempt. A new marker is written only after the current Core API
+health check succeeds.
+
+Readiness is fail-closed. If the Core API does not become healthy within the
+configured timeout, the helper exits unsuccessfully and no readiness marker is
+left behind.
+
+This prevents a transient slow boot from being misclassified as a Sentinel
+verification failure while preserving a real startup failure as a failure.
+
+-------------------------------------------------------------------------
+
 ## HLS Command-Line Interface
 
 The canonical administrative interface for HomeLab Sentinel is:
@@ -660,6 +737,7 @@ The current status report evaluates:
 -   Inventory schema version.
 -   SQLite integrity.
 -   Post-boot verification unit enablement.
+-   Last post-boot verification result.
 
 The status engine uses three overall states with stable process exit
 codes:
@@ -710,6 +788,7 @@ The currently supported simulated conditions are:
 wrong-runtime-identity
 missing-database
 unsupported-schema
+failed-verification
 not-installed
 ```
 
@@ -723,6 +802,7 @@ normal                   -> READY          -> exit 0
 wrong-runtime-identity   -> DEGRADED       -> exit 1
 missing-database         -> DEGRADED       -> exit 1
 unsupported-schema       -> DEGRADED       -> exit 1
+failed-verification      -> DEGRADED       -> exit 1
 not-installed            -> NOT INSTALLED  -> exit 2
 ```
 
@@ -1079,6 +1159,9 @@ Verification includes:
 -   Installed HLS CLI comparison against the canonical source.
 -   Public HLS command execution and routing validation with timeout
     protection.
+-   Core API boot-readiness helper presence and executability validation.
+-   Core API readiness gating before post-boot verification.
+-   Current post-boot verification result reporting through `hls status`.
 -   Inventory database validation.
 -   Inventory schema validation.
 -   SQLite integrity validation.

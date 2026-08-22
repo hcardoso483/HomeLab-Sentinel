@@ -73,10 +73,12 @@ check_file "${APP_ROOT}/api/server.py" "Core API server present"
 check_file "${APP_ROOT}/core/inventory/inventory.py" "Living Inventory CLI present"
 check_file "${APP_ROOT}/core/inventory/schema.sql" "Inventory schema present"
 check_file "${REGRESSION_TEST}" "Core API regression test present"
+check_file "${APP_ROOT}/scripts/wait-core-api.sh" "Core API readiness helper present"
 
 check_executable "${APP_ROOT}/api/server.py" "Core API server executable"
 check_executable "${APP_ROOT}/core/inventory/inventory.py" "Living Inventory CLI executable"
 check_executable "${REGRESSION_TEST}" "Core API regression test executable"
+check_executable "${APP_ROOT}/scripts/wait-core-api.sh" "Core API readiness helper executable"
 
 section "HLS CLI"
 

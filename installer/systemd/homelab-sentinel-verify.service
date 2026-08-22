@@ -1,6 +1,7 @@
 [Unit]
 Description=HomeLab Sentinel post-boot verification
-After=local-fs.target
+After=local-fs.target homelab-sentinel-api.service
+Requires=homelab-sentinel-api.service
 ConditionPathExists=/opt/homelab-sentinel/app/scripts/verify-sentinel.sh
 
 [Service]

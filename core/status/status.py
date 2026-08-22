@@ -21,6 +21,7 @@ SIMULATIONS = (
     "wrong-runtime-identity",
     "missing-database",
     "unsupported-schema",
+    "failed-verification",
 )
 
 
@@ -229,6 +230,23 @@ def main():
         status.ready("Post-boot unit", "ENABLED")
     else:
         status.fail("Post-boot unit", "DISABLED")
+
+    verify_result = service_property(VERIFY_UNIT, "Result")
+    verify_exit = service_property(VERIFY_UNIT, "ExecMainStatus")
+
+    if simulation == "failed-verification":
+        verify_result = "exit-code"
+        verify_exit = "1"
+
+    if verify_result == "success" and verify_exit == "0":
+        status.ready("Last result", "SUCCESS")
+    elif verify_result is None or verify_exit is None:
+        status.fail("Last result", "UNKNOWN")
+    else:
+        status.fail(
+            "Last result",
+            f"FAILED ({verify_result or 'unknown'}, exit {verify_exit or '?'})",
+        )
 
     print()
     print("Overall")
