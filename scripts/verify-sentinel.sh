@@ -4,6 +4,9 @@ set -Eeuo pipefail
 APP_ROOT="${APP_ROOT:-/opt/homelab-sentinel/app}"
 DATABASE="${DATABASE:-/srv/homelab-sentinel/sentinel/inventory.db}"
 REGRESSION_TEST="${REGRESSION_TEST:-${APP_ROOT}/tests/test_core_api.sh}"
+HLS_SOURCE="${HLS_SOURCE:-${APP_ROOT}/installer/hls}"
+HLS_INSTALLED="${HLS_INSTALLED:-/usr/local/bin/hls}"
+HLS_COMMAND_TIMEOUT="${HLS_COMMAND_TIMEOUT:-10}"
 TEST_API_PORT="${TEST_API_PORT:-18000}"
 API_PROCESS_PATTERN="${API_PROCESS_PATTERN:-[a]pi/server.py.*--port ${TEST_API_PORT}}"
 
@@ -74,6 +77,92 @@ check_file "${REGRESSION_TEST}" "Core API regression test present"
 check_executable "${APP_ROOT}/api/server.py" "Core API server executable"
 check_executable "${APP_ROOT}/core/inventory/inventory.py" "Living Inventory CLI executable"
 check_executable "${REGRESSION_TEST}" "Core API regression test executable"
+
+section "HLS CLI"
+
+check_file "${HLS_SOURCE}" "Canonical HLS source present"
+check_executable "${HLS_SOURCE}" "Canonical HLS source executable"
+check_file "${HLS_INSTALLED}" "Permanent HLS CLI installed"
+check_executable "${HLS_INSTALLED}" "Permanent HLS CLI executable"
+
+if [[ -f "${HLS_SOURCE}" && -f "${HLS_INSTALLED}" ]]; then
+    if cmp -s "${HLS_SOURCE}" "${HLS_INSTALLED}"; then
+        pass "Installed HLS CLI matches canonical source"
+    else
+        fail "Installed HLS CLI differs from canonical source"
+    fi
+else
+    fail "Installed HLS CLI source comparison unavailable"
+fi
+
+if command -v timeout >/dev/null 2>&1; then
+    pass "HLS command timeout protection available"
+
+    HLS_OUTPUT=""
+
+    if HLS_OUTPUT="$(timeout "${HLS_COMMAND_TIMEOUT}" "${HLS_INSTALLED}" help 2>&1)"; then
+        if grep -Fq "HomeLab Sentinel CLI" <<< "${HLS_OUTPUT}"; then
+            pass "hls help"
+        else
+            fail "hls help returned unexpected output"
+        fi
+    else
+        HLS_RESULT=$?
+        fail "hls help failed (exit ${HLS_RESULT})"
+        [[ -n "${HLS_OUTPUT}" ]] && echo "${HLS_OUTPUT}" >&2
+    fi
+
+    HLS_OUTPUT=""
+    if HLS_OUTPUT="$(timeout "${HLS_COMMAND_TIMEOUT}" "${HLS_INSTALLED}" status 2>&1)"; then
+        if grep -Fq "HomeLab Sentinel Status" <<< "${HLS_OUTPUT}" &&
+           grep -Fxq "  READY" <<< "${HLS_OUTPUT}"; then
+            pass "hls status"
+        else
+            fail "hls status returned unexpected output"
+        fi
+    else
+        HLS_RESULT=$?
+        fail "hls status failed (exit ${HLS_RESULT})"
+        [[ -n "${HLS_OUTPUT}" ]] && echo "${HLS_OUTPUT}" >&2
+    fi
+
+    HLS_OUTPUT=""
+    if HLS_OUTPUT="$(timeout "${HLS_COMMAND_TIMEOUT}" "${HLS_INSTALLED}" inventory list 2>&1)"; then
+        pass "hls inventory"
+    else
+        HLS_RESULT=$?
+        fail "hls inventory failed (exit ${HLS_RESULT})"
+        [[ -n "${HLS_OUTPUT}" ]] && echo "${HLS_OUTPUT}" >&2
+    fi
+
+    HLS_OUTPUT=""
+    if HLS_OUTPUT="$(timeout "${HLS_COMMAND_TIMEOUT}" "${HLS_INSTALLED}" verify --route-check 2>&1)"; then
+        if grep -Fq "[PASS] hls verify route ->" <<< "${HLS_OUTPUT}"; then
+            pass "hls verify route"
+        else
+            fail "hls verify route returned unexpected output"
+        fi
+    else
+        HLS_RESULT=$?
+        fail "hls verify route failed (exit ${HLS_RESULT})"
+        [[ -n "${HLS_OUTPUT}" ]] && echo "${HLS_OUTPUT}" >&2
+    fi
+
+    HLS_OUTPUT=""
+    if HLS_OUTPUT="$(timeout "${HLS_COMMAND_TIMEOUT}" "${HLS_INSTALLED}" install --route-check 2>&1)"; then
+        if grep -Fq "[PASS] hls install route ->" <<< "${HLS_OUTPUT}"; then
+            pass "hls install route"
+        else
+            fail "hls install route returned unexpected output"
+        fi
+    else
+        HLS_RESULT=$?
+        fail "hls install route failed (exit ${HLS_RESULT})"
+        [[ -n "${HLS_OUTPUT}" ]] && echo "${HLS_OUTPUT}" >&2
+    fi
+else
+    fail "HLS command timeout protection unavailable"
+fi
 
 section "INVENTORY DATABASE"
 

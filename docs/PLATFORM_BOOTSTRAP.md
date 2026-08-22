@@ -92,8 +92,10 @@ contract.
 
 The current bootstrap assumes:
 
--   Existing-install mode uses the application tree at `/opt/homelab-sentinel/app`.
--   First-install mode acquires the application tree before Platform Bootstrap runs.
+-   Existing-install mode uses the application tree at
+    `/opt/homelab-sentinel/app`.
+-   First-install mode acquires the application tree before Platform
+    Bootstrap runs.
 -   The Sentinel inventory database already exists.
 -   The host is a supported Debian 13 system.
 -   The host provides systemd.
@@ -135,23 +137,23 @@ They are distinct from module-specific dependencies.
 
 Bootstrap v2 currently manages:
 
-  -----------------------------------------------------------------------
-  Sentinel capability    Debian 13 recovery       Purpose
-                         package
-  ---------------------- ------------------------ -----------------------
-  `python3` command      `python3`                Sentinel Core and
-                                                  platform Python runtime
+  ----------------------------------------------------------------------
+  Sentinel capability   Debian 13 recovery       Purpose
+                        package
+  --------------------- ------------------------ -----------------------
+  `python3` command     `python3`                Sentinel Core and
+                                                 platform Python runtime
 
-  `curl` command         `curl`                   Bootstrap and health
-                                                  endpoint verification
+  `curl` command        `curl`                   Bootstrap and health
+                                                 endpoint verification
 
-  Python `yaml` import   `python3-yaml`           Module metadata and
-                                                  deployment processing
+  Python `yaml` import  `python3-yaml`           Module metadata and
+                                                 deployment processing
 
-  Python `sqlite3`       `libpython3.13-stdlib`   Living Inventory and
-  import                                          Core API database
-                                                  access
-  -----------------------------------------------------------------------
+  Python `sqlite3`      `libpython3.13-stdlib`   Living Inventory and
+  import                                         Core API database
+                                                 access
+  ----------------------------------------------------------------------
 
 The SQLite requirement is the Python SQLite capability used by Sentinel.
 The standalone `sqlite3` command-line package is not currently a
@@ -417,33 +419,33 @@ invalid Sentinel inventory state.
 
 ------------------------------------------------------------------------
 
-
 ## Platform Service Identity
 
-HomeLab Sentinel separates installation privileges from runtime privileges.
+HomeLab Sentinel separates installation privileges from runtime
+privileges.
 
-Platform installation is performed with root privileges because Bootstrap
-must be able to install packages, prepare platform state, install systemd
-units, create system identities, and enable services.
+Platform installation is performed with root privileges because
+Bootstrap must be able to install packages, prepare platform state,
+install systemd units, create system identities, and enable services.
 
-Long-running Sentinel services must not depend on the identity of the human
-administrator who installed the platform.
+Long-running Sentinel services must not depend on the identity of the
+human administrator who installed the platform.
 
 The canonical runtime service identity is:
 
-```text
+``` text
 homelab-sentinel
 ```
 
 The account is declared by:
 
-```text
+``` text
 installer/sysusers.d/homelab-sentinel.conf
 ```
 
 Bootstrap installs the declaration to:
 
-```text
+``` text
 /etc/sysusers.d/homelab-sentinel.conf
 ```
 
@@ -451,7 +453,7 @@ and ensures the identity exists using `systemd-sysusers`.
 
 The account is intentionally non-interactive:
 
-```text
+``` text
 home:  /nonexistent
 shell: /usr/sbin/nologin
 ```
@@ -461,43 +463,43 @@ declaration.
 
 The service identity has been validated running both:
 
-- HomeLab Sentinel Core API.
-- HomeLab Sentinel post-boot verification.
+-   HomeLab Sentinel Core API.
+-   HomeLab Sentinel post-boot verification.
 
 The canonical systemd units therefore use:
 
-```text
+``` text
 User=homelab-sentinel
 Group=homelab-sentinel
 ```
 
 Application code remains administrator-owned under:
 
-```text
+``` text
 /opt/homelab-sentinel/app
 ```
 
-Runtime services require only the permissions necessary to read and execute
-the current Core implementation.
+Runtime services require only the permissions necessary to read and
+execute the current Core implementation.
 
 Persistent Sentinel state remains under:
 
-```text
+``` text
 /srv/homelab-sentinel
 ```
 
-The platform must not require a human account such as the original installer
-user to exist after installation.
+The platform must not require a human account such as the original
+installer user to exist after installation.
 
----
+------------------------------------------------------------------------
 
 ## Responsibilities
 
 The current Platform Bootstrap:
 
-In addition to dependency and inventory-state management, the platform now
-establishes the dedicated `homelab-sentinel` runtime identity and installs the
-canonical `hls` administrative CLI.
+In addition to dependency and inventory-state management, the platform
+now establishes the dedicated `homelab-sentinel` runtime identity and
+installs the canonical `hls` administrative CLI.
 
 1.  Requires root privileges.
 2.  Validates the supported host.
@@ -542,33 +544,32 @@ Installed unit files are deployed to:
 
 ------------------------------------------------------------------------
 
-
 ## HLS Command-Line Interface
 
 The canonical administrative interface for HomeLab Sentinel is:
 
-```text
+``` text
 hls
 ```
 
 Bootstrap installs the version-controlled CLI from:
 
-```text
+``` text
 installer/hls
 ```
 
 to:
 
-```text
+``` text
 /usr/local/bin/hls
 ```
 
-Users should interact with HomeLab Sentinel through `hls` rather than needing
-to know internal repository script paths.
+Users should interact with HomeLab Sentinel through `hls` rather than
+needing to know internal repository script paths.
 
 The currently implemented commands are:
 
-```text
+``` text
 hls help
 hls status
 hls verify
@@ -580,16 +581,16 @@ sudo hls install
 
 On an existing HomeLab Sentinel installation:
 
-```text
+``` text
 sudo hls install
 ```
 
-invokes the Platform Bootstrap and converges the system toward the desired
-Sentinel platform state.
+invokes the Platform Bootstrap and converges the system toward the
+desired Sentinel platform state.
 
 The verified flow includes:
 
-```text
+``` text
 mandatory dependency validation/recovery
         |
         v
@@ -614,29 +615,30 @@ health verification
 full Sentinel verification
 ```
 
-Repeated execution through `sudo hls install` has been verified to remain
-idempotent.
+Repeated execution through `sudo hls install` has been verified to
+remain idempotent.
 
 ### Status
 
-```text
+``` text
 hls status
 ```
 
-delegates platform status evaluation to the dedicated read-only status engine:
+delegates platform status evaluation to the dedicated read-only status
+engine:
 
-```text
+``` text
 core/status/status.py
 ```
 
-The status engine observes the installed Sentinel platform and reports its
-current operational state. It does not install packages, initialize inventory
-state, start or restart services, change permissions, repair configuration, or
-otherwise reconcile the platform.
+The status engine observes the installed Sentinel platform and reports
+its current operational state. It does not install packages, initialize
+inventory state, start or restart services, change permissions, repair
+configuration, or otherwise reconcile the platform.
 
 This preserves the command boundary:
 
-```text
+``` text
 hls status
     -> observe and classify current platform state
 
@@ -659,28 +661,29 @@ The current status report evaluates:
 -   SQLite integrity.
 -   Post-boot verification unit enablement.
 
-The status engine uses three overall states with stable process exit codes:
+The status engine uses three overall states with stable process exit
+codes:
 
-```text
+``` text
 READY          exit 0
 DEGRADED       exit 1
 NOT INSTALLED  exit 2
 ```
 
-`READY` means the observed platform checks required by the current status
-contract are healthy.
+`READY` means the observed platform checks required by the current
+status contract are healthy.
 
-`DEGRADED` means Sentinel is present, or platform remnants indicate that it
-should be present, but one or more observed components are missing, unhealthy,
-incorrect, or unsupported.
+`DEGRADED` means Sentinel is present, or platform remnants indicate that
+it should be present, but one or more observed components are missing,
+unhealthy, incorrect, or unsupported.
 
-`NOT INSTALLED` represents clean platform absence. Components that do not apply
-to a clean uninstalled system are reported as `N/A` rather than being presented
-as failures.
+`NOT INSTALLED` represents clean platform absence. Components that do
+not apply to a clean uninstalled system are reported as `N/A` rather
+than being presented as failures.
 
 This distinction is intentional:
 
-```text
+``` text
 clean platform absence
         -> NOT INSTALLED
 
@@ -689,33 +692,33 @@ installed, partial, inconsistent, or unhealthy platform
 ```
 
 Status evaluation is deliberately read-only. In particular, inventory
-inspection opens the database read-only and must not invoke the inventory state
-manager, because `installer/inventory.py` is allowed to initialize missing state
-during platform reconciliation.
+inspection opens the database read-only and must not invoke the
+inventory state manager, because `installer/inventory.py` is allowed to
+initialize missing state during platform reconciliation.
 
 #### Status Failure-State Testing
 
 The status engine provides an explicit test-only simulation interface:
 
-```text
+``` text
 --simulate CONDITION
 ```
 
 The currently supported simulated conditions are:
 
-```text
+``` text
 wrong-runtime-identity
 missing-database
 unsupported-schema
 not-installed
 ```
 
-Simulation allows status classification and exit-code behavior to be exercised
-without damaging the live Sentinel installation.
+Simulation allows status classification and exit-code behavior to be
+exercised without damaging the live Sentinel installation.
 
 The verified simulation matrix is:
 
-```text
+``` text
 normal                   -> READY          -> exit 0
 wrong-runtime-identity   -> DEGRADED       -> exit 1
 missing-database         -> DEGRADED       -> exit 1
@@ -723,18 +726,19 @@ unsupported-schema       -> DEGRADED       -> exit 1
 not-installed            -> NOT INSTALLED  -> exit 2
 ```
 
-Live degraded-state testing has also verified that stopping the Core API reports
-the service as `INACTIVE`, health as `UNHEALTHY`, overall state as `DEGRADED`,
-and exit code 1. Disabling the post-boot verification unit reports it as
-`DISABLED`, overall state as `DEGRADED`, and exit code 1. Restoring each live
-condition returns the platform to `READY`.
+Live degraded-state testing has also verified that stopping the Core API
+reports the service as `INACTIVE`, health as `UNHEALTHY`, overall state
+as `DEGRADED`, and exit code 1. Disabling the post-boot verification
+unit reports it as `DISABLED`, overall state as `DEGRADED`, and exit
+code 1. Restoring each live condition returns the platform to `READY`.
 
-The simulation interface exists only for controlled regression testing. It does
-not alter production state and is not used by normal `hls status` execution.
+The simulation interface exists only for controlled regression testing.
+It does not alter production state and is not used by normal
+`hls status` execution.
 
 ### Verification
 
-```text
+``` text
 hls verify
 ```
 
@@ -742,26 +746,113 @@ executes the complete Sentinel verification suite.
 
 ### Inventory
 
-```text
+``` text
 hls inventory
 ```
 
 delegates to the authoritative Living Inventory CLI.
 
+### HLS CLI Verification Contract
+
+Sentinel verification validates not only the internal platform
+components but also the installed public HLS interface.
+
+The canonical version-controlled CLI is:
+
+``` text
+/opt/homelab-sentinel/app/installer/hls
+```
+
+and the permanent installed interface is:
+
+``` text
+/usr/local/bin/hls
+```
+
+Verification requires both files to exist and be executable. The
+installed CLI must also match the canonical source byte-for-byte. This
+detects a stale, modified, or otherwise inconsistent installed command
+even when the repository source itself is healthy.
+
+The verifier then exercises the installed `/usr/local/bin/hls` interface
+rather than invoking the canonical source directly.
+
+The current public-command verification matrix is:
+
+``` text
+hls help
+    -> real execution
+
+hls status
+    -> real read-only execution
+    -> overall READY required
+
+hls inventory list
+    -> real read-only execution
+
+hls verify --route-check
+    -> verify command routing only
+
+hls install --route-check
+    -> install command routing only
+```
+
+`help`, `status`, and `inventory` can be safely executed by verification
+without mutating platform state.
+
+Normal `hls verify` cannot be invoked recursively from the verification
+suite, and normal `hls install` may reconcile and mutate platform state.
+These commands therefore provide the test-only `--route-check` path.
+
+A route check verifies that the public command resolves to its
+authoritative target and that the target exists and is executable, but
+it does not execute that target.
+
+This preserves the production command behavior:
+
+``` text
+hls verify
+    -> execute complete Sentinel verification
+
+sudo hls install
+    -> reconcile platform state
+```
+
+while allowing their public routing to be tested safely.
+
+Every public HLS command executed by the verifier is protected by a
+bounded timeout. Verification fails if timeout protection is unavailable
+or if a tested command fails, hangs beyond the configured timeout,
+returns unexpected output, or resolves incorrectly.
+
+This creates two related integrity checks:
+
+``` text
+deployment integrity
+    -> installed HLS matches canonical source
+
+public-command integrity
+    -> installed HLS commands execute or route as designed
+```
+
+The distinction is intentional. A healthy source file alone does not
+prove that the command available to the user after installation is
+current or functional.
+
 ### First-Install Acquisition
 
 The same `hls install` interface now supports two installation states.
 
-When `/opt/homelab-sentinel/app` already contains HomeLab Sentinel, `hls
-install` enters existing-install mode and invokes the Platform Bootstrap to
-reconcile and verify the installed platform.
+When `/opt/homelab-sentinel/app` already contains HomeLab Sentinel,
+`hls install` enters existing-install mode and invokes the Platform
+Bootstrap to reconcile and verify the installed platform.
 
-When HomeLab Sentinel is not yet installed, the standalone bootstrap form of
-`hls` enters first-install acquisition mode.
+When HomeLab Sentinel is not yet installed, the standalone bootstrap
+form of `hls` enters first-install acquisition mode.
 
 The first-install flow is:
 
-```text
+``` text
 standalone bootstrap hls
         |
         v
@@ -796,36 +887,37 @@ install permanent /usr/local/bin/hls
 
 The canonical acquisition source is:
 
-```text
+``` text
 https://github.com/hcardoso483/HomeLab-Sentinel.git
 ```
 
 and the currently selected acquisition branch is:
 
-```text
+``` text
 main
 ```
 
-HTTPS is deliberately used for first installation so acquisition does not
-depend on a preconfigured SSH key or GitHub SSH credentials.
+HTTPS is deliberately used for first installation so acquisition does
+not depend on a preconfigured SSH key or GitHub SSH credentials.
 
 #### Acquisition Staging and Validation
 
-Repository contents are not cloned directly into the final application path.
-First-install acquisition creates a temporary `.bootstrap-*` staging directory
-under the selected installation root and clones the repository there.
+Repository contents are not cloned directly into the final application
+path. First-install acquisition creates a temporary `.bootstrap-*`
+staging directory under the selected installation root and clones the
+repository there.
 
 Before activation, `hls` validates that the acquired tree contains the
-required platform components, including the installer, dependency manager,
-inventory state manager, HLS CLI, systemd units, service identity declaration,
-Core API server, and Sentinel verification script.
+required platform components, including the installer, dependency
+manager, inventory state manager, HLS CLI, systemd units, service
+identity declaration, Core API server, and Sentinel verification script.
 
-Only a tree that passes validation may be moved into the final application
-path.
+Only a tree that passes validation may be moved into the final
+application path.
 
 The final application path must not already exist when first-install
-acquisition attempts activation. An existing installation is handled through
-the existing-install reconciliation path instead.
+acquisition attempts activation. An existing installation is handled
+through the existing-install reconciliation path instead.
 
 #### Transactional Failure Boundary
 
@@ -833,7 +925,7 @@ Acquisition is treated as a transactional operation.
 
 The verified successful path is:
 
-```text
+``` text
 clone
   |
   v
@@ -851,7 +943,7 @@ acquisition complete
 
 The clone-failure path has been explicitly tested:
 
-```text
+``` text
 clone fails
   |
   v
@@ -866,7 +958,7 @@ no application installed
 
 The validation-failure path has also been explicitly tested:
 
-```text
+``` text
 clone succeeds
   |
   v
@@ -886,20 +978,21 @@ In both tested failure paths, no final `app` tree is created and no
 
 First-install acquisition provides an explicit test-only root override:
 
-```text
+``` text
 --test-root PATH
 ```
 
 The test root must be under `/tmp`.
 
-Test mode performs acquisition, staging, validation, activation, and cleanup
-under the temporary root but deliberately does not execute Platform Bootstrap.
-This allows acquisition behavior to be exercised without replacing or
-reconfiguring the live Sentinel installation.
+Test mode performs acquisition, staging, validation, activation, and
+cleanup under the temporary root but deliberately does not execute
+Platform Bootstrap. This allows acquisition behavior to be exercised
+without replacing or reconfiguring the live Sentinel installation.
 
-A successful acquisition test has been verified to produce a checkout with:
+A successful acquisition test has been verified to produce a checkout
+with:
 
-```text
+``` text
 remote: https://github.com/hcardoso483/HomeLab-Sentinel.git
 branch: main
 ```
@@ -908,18 +1001,20 @@ while leaving the live application tree unchanged.
 
 #### Invalid-Tree Simulation
 
-Validation rollback can be exercised through the explicit test-only option:
+Validation rollback can be exercised through the explicit test-only
+option:
 
-```text
+``` text
 --simulate-invalid-tree
 ```
 
 This option is accepted only together with `--test-root`.
 
-After a successful clone, simulation deliberately removes a required Sentinel
-file from the staged checkout before validation. Validation must then reject
-the acquired tree, acquisition must exit unsuccessfully, staging must be
-removed, and no final application tree may be activated.
+After a successful clone, simulation deliberately removes a required
+Sentinel file from the staged checkout before validation. Validation
+must then reject the acquired tree, acquisition must exit
+unsuccessfully, staging must be removed, and no final application tree
+may be activated.
 
 Simulation exists only to prove the rollback contract. It is not part of
 normal production installation behavior.
@@ -928,7 +1023,7 @@ normal production installation behavior.
 
 The resulting `hls install` behavior is:
 
-```text
+``` text
 HomeLab Sentinel absent
         |
         +--> first-install acquisition
@@ -946,11 +1041,11 @@ HomeLab Sentinel present
                 +--> verify desired platform state
 ```
 
-Existing-install mode has been regression-tested after introduction of the
-first-install acquisition logic and continues to complete the full Platform
-Bootstrap and Sentinel verification suite successfully.
+Existing-install mode has been regression-tested after introduction of
+the first-install acquisition logic and continues to complete the full
+Platform Bootstrap and Sentinel verification suite successfully.
 
----
+------------------------------------------------------------------------
 
 ## Core API
 
@@ -979,6 +1074,11 @@ to pass.
 Verification includes:
 
 -   Application tree validation.
+-   Canonical and installed HLS CLI presence and executability
+    validation.
+-   Installed HLS CLI comparison against the canonical source.
+-   Public HLS command execution and routing validation with timeout
+    protection.
 -   Inventory database validation.
 -   Inventory schema validation.
 -   SQLite integrity validation.

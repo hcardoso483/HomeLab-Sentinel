@@ -158,6 +158,20 @@ command_install() {
     local test_root=""
     local simulate_invalid_tree=false
 
+    if [[ "${1:-}" == "--route-check" ]]; then
+        local installer="${APP_ROOT}/installer/install.sh"
+
+        require_file "${installer}"
+
+        if [[ ! -x "${installer}" ]]; then
+            echo "[ERROR] Platform Bootstrap is not executable: ${installer}" >&2
+            return 1
+        fi
+
+        echo "[PASS] hls install route -> ${installer}"
+        return 0
+    fi
+
     if [[ "${EUID}" -ne 0 ]]; then
         echo "[ERROR] Installation requires root privileges." >&2
         echo "[SUGGESTION] Run: sudo hls install" >&2
@@ -240,6 +254,19 @@ command_status() {
 
 command_verify() {
     local verifier="${APP_ROOT}/scripts/verify-sentinel.sh"
+
+    if [[ "${1:-}" == "--route-check" ]]; then
+        require_file "${verifier}"
+
+        if [[ ! -x "${verifier}" ]]; then
+            echo "[ERROR] Sentinel verifier is not executable: ${verifier}" >&2
+            return 1
+        fi
+
+        echo "[PASS] hls verify route -> ${verifier}"
+        return 0
+    fi
+
     require_file "${verifier}"
     exec "${verifier}"
 }
