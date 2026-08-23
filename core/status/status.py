@@ -10,8 +10,13 @@ from pathlib import Path
 
 APP_ROOT = Path("/opt/homelab-sentinel/app")
 DATABASE = Path("/srv/homelab-sentinel/sentinel/inventory.db")
+DISCOVERY_STATE = Path(
+    "/srv/homelab-sentinel/sentinel/runtime/discovery.json"
+)
 API_UNIT = "homelab-sentinel-api.service"
 VERIFY_UNIT = "homelab-sentinel-verify.service"
+DISCOVERY_UNIT = "homelab-sentinel-discovery.service"
+DISCOVERY_TIMER = "homelab-sentinel-discovery.timer"
 EXPECTED_USER = "homelab-sentinel"
 EXPECTED_GROUP = "homelab-sentinel"
 API_HEALTH_URL = "http://127.0.0.1:8000/api/v1/health"
@@ -22,6 +27,10 @@ SIMULATIONS = (
     "missing-database",
     "unsupported-schema",
     "failed-verification",
+    "discovery-failed",
+    "discovery-recovering",
+    "discovery-scheduler-disabled",
+    "discovery-state-unreadable",
 )
 
 
@@ -74,6 +83,37 @@ def api_health():
             return payload.get("status") == "ok"
     except (urllib.error.URLError, TimeoutError, ValueError, OSError):
         return False
+
+
+def discovery_runtime_status():
+    if not DISCOVERY_STATE.is_file():
+        return None
+
+    try:
+        payload = json.loads(
+            DISCOVERY_STATE.read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError):
+        return {"readable": False}
+
+    if not isinstance(payload, dict):
+        return {"readable": False}
+
+    return {
+        "readable": True,
+        "state": payload.get("state"),
+        "provider": payload.get("provider"),
+        "last_success_at": payload.get("last_success_at"),
+        "last_failure_at": payload.get("last_failure_at"),
+        "failure_class": payload.get("last_failure_class"),
+        "failure_component": payload.get("last_failure_component"),
+        "failure_retryable": payload.get("last_failure_retryable"),
+        "freshness": payload.get("freshness"),
+        "attempt": payload.get("attempt"),
+        "max_attempts": payload.get("max_attempts"),
+        "recovery_action": payload.get("recovery_action"),
+        "recovery_result": payload.get("recovery_result"),
+    }
 
 
 def inventory_status():
@@ -136,6 +176,18 @@ def main():
         status.ready("Endpoint", "127.0.0.1:8000")
 
         print()
+        print("Discovery")
+        status.ready("Scheduler", "N/A")
+        status.ready("Schedule", "N/A")
+        status.ready("Runtime", "N/A")
+        status.ready("Provider", "N/A")
+        status.ready("Last run", "N/A")
+        status.ready("Last success", "N/A")
+        status.ready("Freshness", "N/A")
+        status.ready("Attempt", "N/A")
+        status.ready("Recovery", "N/A")
+
+        print()
         print("Inventory")
         status.ready("Database", "N/A")
         status.ready("Schema", "N/A")
@@ -192,6 +244,150 @@ def main():
         status.fail("Health", "UNHEALTHY")
 
     status.ready("Endpoint", "127.0.0.1:8000")
+
+    print()
+    print("Discovery")
+
+    scheduler_active_result = run_command(
+        "systemctl",
+        "is-active",
+        DISCOVERY_TIMER,
+    )
+    scheduler_enabled_result = run_command(
+        "systemctl",
+        "is-enabled",
+        DISCOVERY_TIMER,
+    )
+
+    scheduler_active = (
+        scheduler_active_result.returncode == 0
+        and scheduler_active_result.stdout.strip() == "active"
+    )
+    scheduler_enabled = (
+        scheduler_enabled_result.returncode == 0
+        and scheduler_enabled_result.stdout.strip() == "enabled"
+    )
+
+    if simulation == "discovery-scheduler-disabled":
+        scheduler_active = False
+        scheduler_enabled = False
+
+    if scheduler_active:
+        status.ready("Scheduler", "ACTIVE")
+    else:
+        status.fail("Scheduler", "INACTIVE")
+
+    if scheduler_enabled:
+        status.ready("Schedule", "ENABLED")
+    else:
+        status.fail("Schedule", "DISABLED")
+
+    discovery = discovery_runtime_status()
+
+    if simulation == "discovery-state-unreadable":
+        discovery = {"readable": False}
+
+    elif simulation in {
+        "discovery-failed",
+        "discovery-recovering",
+    }:
+        simulated = dict(discovery or {})
+        simulated["readable"] = True
+        simulated.setdefault("provider", "nmap")
+        simulated.setdefault("last_success_at", "2026-01-01T00:00:00Z")
+        simulated.setdefault("attempt", 1)
+        simulated.setdefault("max_attempts", 2)
+
+        if simulation == "discovery-failed":
+            simulated["state"] = "FAILED"
+            simulated["freshness"] = "STALE"
+            simulated["attempt"] = 2
+            simulated["recovery_action"] = "retry"
+            simulated["recovery_result"] = "failed"
+
+        else:
+            simulated["state"] = "RECOVERING"
+            simulated["freshness"] = "STALE"
+            simulated["attempt"] = 1
+            simulated["recovery_action"] = "retry"
+            simulated["recovery_result"] = "in-progress"
+
+        discovery = simulated
+
+    if discovery is None:
+        status.fail("Runtime", "NEVER RUN")
+        status.ready("Provider", "N/A")
+        status.ready("Last run", "NEVER RUN")
+        status.ready("Last success", "N/A")
+        status.fail("Freshness", "UNKNOWN")
+        status.ready("Attempt", "N/A")
+        status.fail("Recovery", "UNKNOWN")
+
+    elif not discovery.get("readable"):
+        status.fail("Runtime", "UNKNOWN")
+        status.ready("Provider", "UNKNOWN")
+        status.ready("Last run", "UNKNOWN")
+        status.ready("Last success", "UNKNOWN")
+        status.fail("Freshness", "UNKNOWN")
+        status.ready("Attempt", "UNKNOWN")
+        status.fail("Recovery", "UNKNOWN")
+
+    else:
+        runtime_state = discovery.get("state") or "UNKNOWN"
+        freshness = discovery.get("freshness") or "UNKNOWN"
+
+        if runtime_state == "SUCCESS" and freshness == "FRESH":
+            status.ready("Runtime", "HEALTHY")
+        elif runtime_state == "RECOVERING":
+            status.fail("Runtime", "RECOVERING")
+        elif runtime_state == "FAILED":
+            status.fail("Runtime", "DEGRADED")
+        else:
+            status.fail("Runtime", "UNKNOWN")
+
+        status.ready(
+            "Provider",
+            discovery.get("provider") or "UNKNOWN",
+        )
+        status.ready(
+            "Last run",
+            runtime_state,
+        )
+        status.ready(
+            "Last success",
+            discovery.get("last_success_at") or "N/A",
+        )
+
+        if freshness == "FRESH":
+            status.ready("Freshness", "FRESH")
+        else:
+            status.fail("Freshness", freshness)
+
+        attempt = discovery.get("attempt")
+        max_attempts = discovery.get("max_attempts")
+
+        if attempt is None or max_attempts is None:
+            attempt_value = "UNKNOWN"
+        else:
+            attempt_value = f"{attempt}/{max_attempts}"
+
+        status.ready("Attempt", attempt_value)
+
+        recovery = discovery.get("recovery_result")
+
+        if recovery == "not-attempted":
+            status.ready("Recovery", "NOT REQUIRED")
+        elif recovery == "recovered":
+            status.ready("Recovery", "RECOVERED")
+        elif recovery == "in-progress":
+            status.fail("Recovery", "IN PROGRESS")
+        elif recovery == "failed":
+            status.fail("Recovery", "FAILED")
+        else:
+            status.fail(
+                "Recovery",
+                recovery or "UNKNOWN",
+            )
 
     print()
     print("Inventory")

@@ -5,6 +5,7 @@ set -Eeuo pipefail
 APP_ROOT="${APP_ROOT:-/opt/homelab-sentinel/app}"
 DATABASE="${DATABASE:-/srv/homelab-sentinel/sentinel/inventory.db}"
 REGRESSION_TEST="${REGRESSION_TEST:-${APP_ROOT}/tests/test_core_api.sh}"
+STATUS_TEST="${STATUS_TEST:-${APP_ROOT}/tests/test_status.sh}"
 CORRELATION_TEST="${CORRELATION_TEST:-${APP_ROOT}/tests/test_correlation.sh}"
 HLS_SOURCE="${HLS_SOURCE:-${APP_ROOT}/installer/hls}"
 HLS_INSTALLED="${HLS_INSTALLED:-/usr/local/bin/hls}"
@@ -76,12 +77,14 @@ check_file "${APP_ROOT}/core/inventory/inventory.py" "Living Inventory CLI prese
 check_file "${APP_ROOT}/core/inventory/schema.sql" "Inventory schema present"
 check_file "${REGRESSION_TEST}" "Core API regression test present"
 check_file "${CORRELATION_TEST}" "Correlation regression test present"
+check_file "${STATUS_TEST}" "Status regression test present"
 check_file "${APP_ROOT}/scripts/wait-core-api.sh" "Core API readiness helper present"
 
 check_executable "${APP_ROOT}/api/server.py" "Core API server executable"
 check_executable "${APP_ROOT}/core/inventory/inventory.py" "Living Inventory CLI executable"
 check_executable "${REGRESSION_TEST}" "Core API regression test executable"
 check_executable "${CORRELATION_TEST}" "Correlation regression test executable"
+check_executable "${STATUS_TEST}" "Status regression test executable"
 check_executable "${APP_ROOT}/scripts/wait-core-api.sh" "Core API readiness helper executable"
 
 section "HLS CLI"
@@ -265,6 +268,18 @@ if [[ -x "${CORRELATION_TEST}" ]]; then
     fi
 else
     fail "Correlation regression test cannot run: ${CORRELATION_TEST}"
+fi
+
+section "STATUS REGRESSION"
+
+if [[ -x "${STATUS_TEST}" ]]; then
+    if "${STATUS_TEST}"; then
+        pass "Status regression suite"
+    else
+        fail "Status regression suite"
+    fi
+else
+    fail "Status regression test cannot run: ${STATUS_TEST}"
 fi
 
 section "CORE API REGRESSION"
