@@ -17,6 +17,10 @@ INVENTORY_MANAGER="${SCRIPT_DIR}/inventory.py"
 HLS_SOURCE="${SCRIPT_DIR}/hls"
 HLS_TARGET="/usr/local/bin/hls"
 API_HEALTH_URL="http://127.0.0.1:8000/api/v1/health"
+SERVICE_USER="homelab-sentinel"
+SERVICE_GROUP="homelab-sentinel"
+SENTINEL_STATE_DIR="/srv/homelab-sentinel/sentinel"
+INVENTORY_DATABASE="${SENTINEL_STATE_DIR}/inventory.db"
 
 log_info() {
     echo "[INFO] $*"
@@ -73,6 +77,21 @@ wait_for_api() {
     die "Core API did not become healthy."
 }
 
+reconcile_sentinel_state_ownership() {
+    require_file "${INVENTORY_DATABASE}"
+
+    [[ -d "${SENTINEL_STATE_DIR}" ]] || \
+        die "Sentinel state directory not found: ${SENTINEL_STATE_DIR}"
+
+    log_info "Reconciling Sentinel state ownership..."
+
+    chown "${SERVICE_USER}:${SERVICE_GROUP}" \
+        "${SENTINEL_STATE_DIR}" \
+        "${INVENTORY_DATABASE}"
+
+    log_pass "Sentinel state ownership ready: ${SERVICE_USER}:${SERVICE_GROUP}"
+}
+
 echo "HomeLab Sentinel Platform Bootstrap"
 echo
 
@@ -94,6 +113,7 @@ require_command install
 require_command systemctl
 require_command python3
 require_command curl
+require_command chown
 
 log_info "Preparing sysusers configuration directory..."
 install -d -m 0755 "$(dirname "${SYSUSERS_TARGET}")"
@@ -103,6 +123,8 @@ install -m 0644 "${SYSUSERS_SOURCE}" "${SYSUSERS_TARGET}"
 
 log_info "Ensuring HomeLab Sentinel service identity exists..."
 systemd-sysusers "${SYSUSERS_TARGET}"
+
+reconcile_sentinel_state_ownership
 
 require_file "${APP_ROOT}/api/server.py"
 require_file "${APP_ROOT}/scripts/verify-sentinel.sh"
