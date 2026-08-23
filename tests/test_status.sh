@@ -122,6 +122,46 @@ require_contains \
     "Overall degraded by Discovery failure"
 
 run_case \
+    "DISCOVERY RUNNING" \
+    0 \
+    --simulate discovery-running
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Runtime              RUNNING" \
+    "Discovery running state reported"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Last run             RUNNING" \
+    "Discovery running last-run state reported"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Freshness            IN PROGRESS" \
+    "Discovery running freshness reported"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Recovery             NOT REQUIRED" \
+    "Discovery running does not imply recovery"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Health               HEALTHY" \
+    "Core API remains healthy while Discovery runs"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Database             READY" \
+    "Inventory remains ready while Discovery runs"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "  READY" \
+    "Overall remains ready while Discovery runs"
+
+run_case \
     "DISCOVERY RECOVERING" \
     1 \
     --simulate discovery-recovering

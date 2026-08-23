@@ -29,6 +29,7 @@ SIMULATIONS = (
     "failed-verification",
     "discovery-failed",
     "discovery-recovering",
+    "discovery-running",
     "discovery-scheduler-disabled",
     "discovery-state-unreadable",
 )
@@ -290,6 +291,7 @@ def main():
     elif simulation in {
         "discovery-failed",
         "discovery-recovering",
+        "discovery-running",
     }:
         simulated = dict(discovery or {})
         simulated["readable"] = True
@@ -305,12 +307,19 @@ def main():
             simulated["recovery_action"] = "retry"
             simulated["recovery_result"] = "failed"
 
-        else:
+        elif simulation == "discovery-recovering":
             simulated["state"] = "RECOVERING"
             simulated["freshness"] = "STALE"
             simulated["attempt"] = 1
             simulated["recovery_action"] = "retry"
             simulated["recovery_result"] = "in-progress"
+
+        else:
+            simulated["state"] = "RUNNING"
+            simulated["freshness"] = "UNKNOWN"
+            simulated["attempt"] = 1
+            simulated["recovery_action"] = "none"
+            simulated["recovery_result"] = "not-attempted"
 
         discovery = simulated
 
@@ -338,6 +347,8 @@ def main():
 
         if runtime_state == "SUCCESS" and freshness == "FRESH":
             status.ready("Runtime", "HEALTHY")
+        elif runtime_state == "RUNNING":
+            status.ready("Runtime", "RUNNING")
         elif runtime_state == "RECOVERING":
             status.fail("Runtime", "RECOVERING")
         elif runtime_state == "FAILED":
@@ -358,7 +369,9 @@ def main():
             discovery.get("last_success_at") or "N/A",
         )
 
-        if freshness == "FRESH":
+        if runtime_state == "RUNNING":
+            status.ready("Freshness", "IN PROGRESS")
+        elif freshness == "FRESH":
             status.ready("Freshness", "FRESH")
         else:
             status.fail("Freshness", freshness)
