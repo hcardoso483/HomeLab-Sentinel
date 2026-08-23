@@ -74,6 +74,14 @@ write_state() {
     local resolved="${12}"
     local unresolved="${13}"
     local failure_reason="${14}"
+    local failure_class="${15:-}"
+    local failure_component="${16:-}"
+    local failure_retryable="${17:-}"
+    local failure_detail="${18:-}"
+    local attempt="${19:-1}"
+    local max_attempts="${20:-2}"
+    local recovery_action="${21:-none}"
+    local recovery_result="${22:-not-attempted}"
 
     python3 - \
         "${STATE_FILE}" \
@@ -90,7 +98,15 @@ write_state() {
         "${created}" \
         "${resolved}" \
         "${unresolved}" \
-        "${failure_reason}" <<'PY'
+        "${failure_reason}" \
+        "${failure_class}" \
+        "${failure_component}" \
+        "${failure_retryable}" \
+        "${failure_detail}" \
+        "${attempt}" \
+        "${max_attempts}" \
+        "${recovery_action}" \
+        "${recovery_result}" <<'PY'
 import json
 import os
 import sys
@@ -113,6 +129,14 @@ from pathlib import Path
     resolved,
     unresolved,
     failure_reason,
+    failure_class,
+    failure_component,
+    failure_retryable,
+    failure_detail,
+    attempt,
+    max_attempts,
+    recovery_action,
+    recovery_result,
 ) = sys.argv[1:]
 
 path = Path(state_path)
@@ -134,16 +158,31 @@ if not isinstance(previous, dict):
 last_success_at = previous.get("last_success_at")
 last_failure_at = previous.get("last_failure_at")
 last_failure_reason = previous.get("last_failure_reason")
+last_failure_class = previous.get("last_failure_class")
+last_failure_component = previous.get("last_failure_component")
+last_failure_retryable = previous.get("last_failure_retryable")
+last_failure_detail = previous.get("last_failure_detail")
 
 if transition == "success":
     last_success_at = finished_at
 elif transition == "failure":
     last_failure_at = finished_at
     last_failure_reason = failure_reason
+    last_failure_class = failure_class or None
+    last_failure_component = failure_component or None
+
+    if failure_retryable == "true":
+        last_failure_retryable = True
+    elif failure_retryable == "false":
+        last_failure_retryable = False
+    else:
+        last_failure_retryable = None
+
+    last_failure_detail = failure_detail or None
 
 if result_state == "SUCCESS":
     freshness = "FRESH"
-elif result_state == "FAILED" and last_success_at:
+elif result_state in {"FAILED", "RECOVERING"} and last_success_at:
     freshness = "STALE"
 else:
     freshness = "UNKNOWN"
@@ -154,7 +193,7 @@ def number(value):
     return int(value)
 
 state = {
-    "version": 1,
+    "version": 3,
     "run_id": run_id,
     "state": result_state,
     "provider": provider or None,
@@ -163,6 +202,10 @@ state = {
     "last_success_at": last_success_at,
     "last_failure_at": last_failure_at,
     "last_failure_reason": last_failure_reason,
+    "last_failure_class": last_failure_class,
+    "last_failure_component": last_failure_component,
+    "last_failure_retryable": last_failure_retryable,
+    "last_failure_detail": last_failure_detail,
     "observations": number(stored),
     "duplicates": number(duplicates),
     "scope_count": number(scope_count),
@@ -172,10 +215,10 @@ state = {
         "resolved": number(resolved),
         "unresolved": number(unresolved),
     },
-    "attempt": 1,
-    "max_attempts": 1,
-    "recovery_action": "none",
-    "recovery_result": "not-attempted",
+    "attempt": int(attempt),
+    "max_attempts": int(max_attempts),
+    "recovery_action": recovery_action,
+    "recovery_result": recovery_result,
     "freshness": freshness,
 }
 
@@ -253,6 +296,10 @@ print(f"Finished        {value('finished_at')}")
 print(f"Last success    {value('last_success_at')}")
 print(f"Last failure    {value('last_failure_at')}")
 print(f"Failure reason  {value('last_failure_reason')}")
+print(f"Failure class   {value('last_failure_class')}")
+print(f"Failure comp.   {value('last_failure_component')}")
+print(f"Retryable       {value('last_failure_retryable')}")
+print(f"Failure detail  {value('last_failure_detail')}")
 print(f"Freshness       {value('freshness')}")
 print(f"Scopes          {value('scope_count')}")
 print(f"Observations    {value('observations')}")
@@ -264,9 +311,280 @@ print(
     f"resolved={correlation_value('resolved')} "
     f"unresolved={correlation_value('unresolved')}"
 )
+print(
+    f"Attempt         {value('attempt')}/"
+    f"{value('max_attempts')}"
+)
+print(f"Recovery action {value('recovery_action')}")
 print(f"Recovery        {value('recovery_result')}")
 PY
 }
+
+classify_failure() {
+    local log_file="$1"
+
+    python3 - "${log_file}" <<'PY_CLASSIFY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+
+try:
+    lines = path.read_text(
+        encoding="utf-8",
+        errors="replace",
+    ).splitlines()
+except OSError as exc:
+    print("platform")
+    print("runtime")
+    print("false")
+    print(f"Unable to inspect discovery failure log: {exc}")
+    raise SystemExit(0)
+
+error_lines = [
+    line.strip()
+    for line in lines
+    if line.startswith("[ERROR]") or line.startswith("[FAIL]")
+]
+
+
+def find(pattern):
+    regex = re.compile(pattern, re.IGNORECASE)
+
+    for line in error_lines:
+        if regex.search(line):
+            return line
+
+    for line in lines:
+        if regex.search(line):
+            return line.strip()
+
+    return None
+
+
+rules = [
+    (
+        r"Invalid discovery scope configuration:",
+        "configuration",
+        "scopes",
+        "false",
+    ),
+    (
+        r"Discovery scope configuration not found:",
+        "configuration",
+        "scopes",
+        "false",
+    ),
+    (
+        r"Invalid provider configuration:|"
+        r"Configured provider is unavailable|"
+        r"Unable to resolve discovery provider|"
+        r"Discovery provider resolved to an empty ID",
+        "configuration",
+        "resolver",
+        "false",
+    ),
+    (
+        r"Required command not found:|"
+        r"Nmap normalizer is missing or not executable:|"
+        r"Discovery provider entry point not found or not executable:",
+        "dependency",
+        "provider",
+        "false",
+    ),
+    (
+        r"Required discovery component not found:|"
+        r"Required pipeline component not found or not executable:",
+        "dependency",
+        "pipeline",
+        "false",
+    ),
+    (
+        r"Discovery record validation failed for scope:",
+        "data",
+        "validation",
+        "false",
+    ),
+    (
+        r"Observation store failed:|"
+        r"Correlation failed:|"
+        r"Inventory schema not found:",
+        "data",
+        "inventory",
+        "false",
+    ),
+    (
+        r"network is unreachable|"
+        r"no route to host|"
+        r"temporary failure|"
+        r"timed out|"
+        r"timeout",
+        "transient",
+        "provider",
+        "true",
+    ),
+]
+
+for pattern, failure_class, component, retryable in rules:
+    detail = find(pattern)
+
+    if detail is not None:
+        print(failure_class)
+        print(component)
+        print(retryable)
+        print(detail)
+        raise SystemExit(0)
+
+detail = find(r"Discovery provider failed for scope:")
+
+if detail is not None:
+    print("unknown")
+    print("provider")
+    print("false")
+    print(detail)
+    raise SystemExit(0)
+
+detail = error_lines[0] if error_lines else None
+
+if detail is None:
+    nonempty = [
+        line.strip()
+        for line in lines
+        if line.strip()
+    ]
+    detail = (
+        nonempty[-1]
+        if nonempty
+        else "Unknown discovery failure"
+    )
+
+print("unknown")
+print("pipeline")
+print("false")
+print(detail)
+PY_CLASSIFY
+}
+
+
+run_pipeline_attempt() {
+    local run_log="$1"
+
+    local -n result_exit="$2"
+    local -n result_provider="$3"
+    local -n result_scope_count="$4"
+    local -n result_stored="$5"
+    local -n result_duplicates="$6"
+    local -n result_processed="$7"
+    local -n result_created="$8"
+    local -n result_resolved="$9"
+    local -n result_unresolved="${10}"
+
+    local store_line=""
+    local correlation_line=""
+
+    result_exit=0
+    result_provider=""
+    result_scope_count=""
+    result_stored=""
+    result_duplicates=""
+    result_processed=""
+    result_created=""
+    result_resolved=""
+    result_unresolved=""
+
+    if "${PIPELINE}" \
+        --database "${DATABASE}" \
+        "${SCOPE_CONFIG}" >"${run_log}" 2>&1
+    then
+        result_exit=0
+    else
+        result_exit=$?
+    fi
+
+    cat "${run_log}"
+
+    result_provider="$(
+        sed -n 's/^\[INFO\] Discovery provider: //p' "${run_log}" |
+            tail -n 1
+    )"
+
+    result_scope_count="$(
+        grep -c '^\[INFO\] Discovering scope:' "${run_log}" || true
+    )"
+
+    if store_line="$(
+        grep '^\[INFO\] Observation store complete\.' "${run_log}" |
+            tail -n 1
+    )"; then
+        result_stored="$(
+            sed -n \
+                's/.*Stored: \([0-9][0-9]*\), duplicates: \([0-9][0-9]*\).*/\1/p' \
+                <<< "${store_line}"
+        )"
+
+        result_duplicates="$(
+            sed -n \
+                's/.*Stored: \([0-9][0-9]*\), duplicates: \([0-9][0-9]*\).*/\2/p' \
+                <<< "${store_line}"
+        )"
+    fi
+
+    if correlation_line="$(
+        grep '^\[INFO\] Correlation complete\.' "${run_log}" |
+            tail -n 1
+    )"; then
+        result_processed="$(
+            sed -n \
+                's/.*Processed: \([0-9][0-9]*\), created: \([0-9][0-9]*\), resolved: \([0-9][0-9]*\), unresolved: \([0-9][0-9]*\).*/\1/p' \
+                <<< "${correlation_line}"
+        )"
+
+        result_created="$(
+            sed -n \
+                's/.*Processed: \([0-9][0-9]*\), created: \([0-9][0-9]*\), resolved: \([0-9][0-9]*\), unresolved: \([0-9][0-9]*\).*/\2/p' \
+                <<< "${correlation_line}"
+        )"
+
+        result_resolved="$(
+            sed -n \
+                's/.*Processed: \([0-9][0-9]*\), created: \([0-9][0-9]*\), resolved: \([0-9][0-9]*\), unresolved: \([0-9][0-9]*\).*/\3/p' \
+                <<< "${correlation_line}"
+        )"
+
+        result_unresolved="$(
+            sed -n \
+                's/.*Processed: \([0-9][0-9]*\), created: \([0-9][0-9]*\), resolved: \([0-9][0-9]*\), unresolved: \([0-9][0-9]*\).*/\4/p' \
+                <<< "${correlation_line}"
+        )"
+    fi
+}
+
+
+extract_failure_reason() {
+    local log_file="$1"
+    local exit_code="$2"
+    local reason=""
+
+    reason="$(
+        grep -E '^\[(ERROR|FAIL)\]' "${log_file}" |
+            tail -n 1
+    )"
+
+    if [[ -z "${reason}" ]]; then
+        reason="$(
+            grep -v '^[[:space:]]*$' "${log_file}" |
+                tail -n 1
+        )"
+    fi
+
+    if [[ -z "${reason}" ]]; then
+        reason="discovery pipeline exited with status ${exit_code}"
+    fi
+
+    printf '%s\n' "${reason}"
+}
+
 
 run_runtime() {
     local run_id
@@ -274,6 +592,7 @@ run_runtime() {
     local finished_at
     local run_log
     local pipeline_exit
+
     local provider=""
     local scope_count=""
     local stored=""
@@ -282,7 +601,17 @@ run_runtime() {
     local created=""
     local resolved=""
     local unresolved=""
+
     local failure_reason=""
+    local failure_class=""
+    local failure_component=""
+    local failure_retryable=""
+    local failure_detail=""
+    local -a failure_metadata=()
+
+    local attempt=1
+    local max_attempts=2
+    local retry_delay=5
 
     require_run_identity
     require_runtime_inputs
@@ -306,65 +635,34 @@ run_runtime() {
         "" \
         "" \
         "" \
-        ""
+        "" \
+        "" \
+        "" \
+        "" \
+        "" \
+        "${attempt}" \
+        "${max_attempts}" \
+        "none" \
+        "not-attempted"
 
     echo "[INFO] Discovery runtime started: ${run_id}"
+    echo "[INFO] Discovery attempt ${attempt}/${max_attempts}"
 
-    run_log="$(mktemp "${STATE_DIR}/.discovery-run.XXXXXX.log")"
-
-    set +e
-    "${PIPELINE}" \
-        --database "${DATABASE}" \
-        "${SCOPE_CONFIG}" >"${run_log}" 2>&1
-    pipeline_exit=$?
-    set -e
-
-    cat "${run_log}"
-
-    provider="$(
-        sed -n 's/^\[INFO\] Discovery provider: //p' "${run_log}" |
-            tail -n 1
+    run_log="$(
+        mktemp "${STATE_DIR}/.discovery-run.XXXXXX.log"
     )"
 
-    scope_count="$(
-        grep -c '^\[INFO\] Discovering scope:' "${run_log}" || true
-    )"
-
-    if store_line="$(
-        grep '^\[INFO\] Observation store complete\.' "${run_log}" |
-            tail -n 1
-    )"; then
-        stored="$(
-            sed -n 's/.*Stored: \([0-9][0-9]*\), duplicates: \([0-9][0-9]*\).*/\1/p' \
-                <<< "${store_line}"
-        )"
-        duplicates="$(
-            sed -n 's/.*Stored: \([0-9][0-9]*\), duplicates: \([0-9][0-9]*\).*/\2/p' \
-                <<< "${store_line}"
-        )"
-    fi
-
-    if correlation_line="$(
-        grep '^\[INFO\] Correlation complete\.' "${run_log}" |
-            tail -n 1
-    )"; then
-        processed="$(
-            sed -n 's/.*Processed: \([0-9][0-9]*\), created: \([0-9][0-9]*\), resolved: \([0-9][0-9]*\), unresolved: \([0-9][0-9]*\).*/\1/p' \
-                <<< "${correlation_line}"
-        )"
-        created="$(
-            sed -n 's/.*Processed: \([0-9][0-9]*\), created: \([0-9][0-9]*\), resolved: \([0-9][0-9]*\), unresolved: \([0-9][0-9]*\).*/\2/p' \
-                <<< "${correlation_line}"
-        )"
-        resolved="$(
-            sed -n 's/.*Processed: \([0-9][0-9]*\), created: \([0-9][0-9]*\), resolved: \([0-9][0-9]*\), unresolved: \([0-9][0-9]*\).*/\3/p' \
-                <<< "${correlation_line}"
-        )"
-        unresolved="$(
-            sed -n 's/.*Processed: \([0-9][0-9]*\), created: \([0-9][0-9]*\), resolved: \([0-9][0-9]*\), unresolved: \([0-9][0-9]*\).*/\4/p' \
-                <<< "${correlation_line}"
-        )"
-    fi
+    run_pipeline_attempt \
+        "${run_log}" \
+        pipeline_exit \
+        provider \
+        scope_count \
+        stored \
+        duplicates \
+        processed \
+        created \
+        resolved \
+        unresolved
 
     finished_at="$(utc_now)"
 
@@ -383,29 +681,176 @@ run_runtime() {
             "${created}" \
             "${resolved}" \
             "${unresolved}" \
-            ""
+            "" \
+            "" \
+            "" \
+            "" \
+            "" \
+            "${attempt}" \
+            "${max_attempts}" \
+            "none" \
+            "not-attempted"
 
         rm -f "${run_log}"
 
-        echo "[PASS] Discovery runtime completed successfully: ${run_id}"
+        echo \
+            "[PASS] Discovery runtime completed successfully: " \
+            "${run_id}"
+
         return 0
     fi
 
     failure_reason="$(
-        grep -E '^\[(ERROR|FAIL)\]' "${run_log}" |
-            tail -n 1
+        extract_failure_reason \
+            "${run_log}" \
+            "${pipeline_exit}"
     )"
 
-    if [[ -z "${failure_reason}" ]]; then
-        failure_reason="$(
-            grep -v '^[[:space:]]*$' "${run_log}" |
-                tail -n 1
-        )"
+    mapfile -t failure_metadata < <(
+        classify_failure "${run_log}"
+    )
+
+    failure_class="${failure_metadata[0]:-unknown}"
+    failure_component="${failure_metadata[1]:-pipeline}"
+    failure_retryable="${failure_metadata[2]:-false}"
+    failure_detail="${failure_metadata[3]:-${failure_reason}}"
+
+    if [[ "${failure_retryable}" != "true" ]]; then
+        write_state \
+            "failure" \
+            "${run_id}" \
+            "${started_at}" \
+            "${finished_at}" \
+            "FAILED" \
+            "${provider}" \
+            "${scope_count}" \
+            "${stored}" \
+            "${duplicates}" \
+            "${processed}" \
+            "${created}" \
+            "${resolved}" \
+            "${unresolved}" \
+            "${failure_reason}" \
+            "${failure_class}" \
+            "${failure_component}" \
+            "${failure_retryable}" \
+            "${failure_detail}" \
+            "${attempt}" \
+            "${max_attempts}" \
+            "none" \
+            "not-attempted"
+
+        rm -f "${run_log}"
+
+        echo \
+            "[FAIL] Discovery runtime failed: ${run_id} " \
+            "(non-retryable ${failure_class} failure)" >&2
+
+        return "${pipeline_exit}"
     fi
 
-    if [[ -z "${failure_reason}" ]]; then
-        failure_reason="discovery pipeline exited with status ${pipeline_exit}"
+    write_state \
+        "failure" \
+        "${run_id}" \
+        "${started_at}" \
+        "${finished_at}" \
+        "RECOVERING" \
+        "${provider}" \
+        "${scope_count}" \
+        "${stored}" \
+        "${duplicates}" \
+        "${processed}" \
+        "${created}" \
+        "${resolved}" \
+        "${unresolved}" \
+        "${failure_reason}" \
+        "${failure_class}" \
+        "${failure_component}" \
+        "${failure_retryable}" \
+        "${failure_detail}" \
+        "${attempt}" \
+        "${max_attempts}" \
+        "retry" \
+        "in-progress"
+
+    rm -f "${run_log}"
+
+    echo \
+        "[RECOVER] Retryable ${failure_class} failure detected; " \
+        "retrying in ${retry_delay} seconds."
+
+    sleep "${retry_delay}"
+
+    attempt=2
+
+    echo "[INFO] Discovery attempt ${attempt}/${max_attempts}"
+
+    run_log="$(
+        mktemp "${STATE_DIR}/.discovery-run.XXXXXX.log"
+    )"
+
+    run_pipeline_attempt \
+        "${run_log}" \
+        pipeline_exit \
+        provider \
+        scope_count \
+        stored \
+        duplicates \
+        processed \
+        created \
+        resolved \
+        unresolved
+
+    finished_at="$(utc_now)"
+
+    if (( pipeline_exit == 0 )); then
+        write_state \
+            "success" \
+            "${run_id}" \
+            "${started_at}" \
+            "${finished_at}" \
+            "SUCCESS" \
+            "${provider}" \
+            "${scope_count}" \
+            "${stored}" \
+            "${duplicates}" \
+            "${processed}" \
+            "${created}" \
+            "${resolved}" \
+            "${unresolved}" \
+            "" \
+            "" \
+            "" \
+            "" \
+            "" \
+            "${attempt}" \
+            "${max_attempts}" \
+            "retry" \
+            "recovered"
+
+        rm -f "${run_log}"
+
+        echo \
+            "[PASS] Discovery runtime recovered successfully: " \
+            "${run_id}"
+
+        return 0
     fi
+
+    failure_reason="$(
+        extract_failure_reason \
+            "${run_log}" \
+            "${pipeline_exit}"
+    )"
+
+    mapfile -t failure_metadata < <(
+        classify_failure "${run_log}"
+    )
+
+    failure_class="${failure_metadata[0]:-unknown}"
+    failure_component="${failure_metadata[1]:-pipeline}"
+    failure_retryable="${failure_metadata[2]:-false}"
+    failure_detail="${failure_metadata[3]:-${failure_reason}}"
 
     write_state \
         "failure" \
@@ -421,13 +866,22 @@ run_runtime() {
         "${created}" \
         "${resolved}" \
         "${unresolved}" \
-        "${failure_reason}"
+        "${failure_reason}" \
+        "${failure_class}" \
+        "${failure_component}" \
+        "${failure_retryable}" \
+        "${failure_detail}" \
+        "${attempt}" \
+        "${max_attempts}" \
+        "retry" \
+        "failed"
 
     rm -f "${run_log}"
 
     echo \
-        "[FAIL] Discovery runtime failed: ${run_id} " \
-        "(pipeline exit ${pipeline_exit})" >&2
+        "[FAIL] Discovery recovery exhausted after " \
+        "${max_attempts} attempts: ${run_id}" >&2
+
     return "${pipeline_exit}"
 }
 
