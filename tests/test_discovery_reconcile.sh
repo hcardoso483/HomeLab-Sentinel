@@ -286,5 +286,228 @@ PY
 rm -f "${CASE_JSON}"
 
 echo
+echo "=== REPAIR PLAN CONTRACTS ==="
+
+run_plan_case() {
+    local name="$1"
+    local expected_exit="$2"
+    local simulation="${3:-}"
+
+    local json_file
+    local result
+
+    json_file="$(mktemp)"
+
+    echo
+    echo "--- ${name} ---"
+
+    set +e
+
+    if [[ -n "${simulation}" ]]; then
+        "${RECONCILER}" plan \
+            --json \
+            --simulate "${simulation}" \
+            >"${json_file}"
+        result=$?
+    else
+        "${RECONCILER}" plan \
+            --json \
+            >"${json_file}"
+        result=$?
+    fi
+
+    set -e
+
+    cat "${json_file}"
+
+    if [[ "${result}" -ne "${expected_exit}" ]]; then
+        rm -f "${json_file}"
+        fail \
+            "${name}: expected exit ${expected_exit}, got ${result}"
+    fi
+
+    pass "${name} exit=${result}"
+
+    CASE_JSON="${json_file}"
+}
+
+
+check_plan() {
+    local expected_compliant="$1"
+    local expected_repairable="$2"
+    local expected_actions="$3"
+    local expected_reason_mode="$4"
+
+    python3 - \
+        "${CASE_JSON}" \
+        "${expected_compliant}" \
+        "${expected_repairable}" \
+        "${expected_actions}" \
+        "${expected_reason_mode}" <<'PYPLAN'
+import json
+import sys
+from pathlib import Path
+
+(
+    path,
+    expected_compliant,
+    expected_repairable,
+    expected_actions,
+    expected_reason_mode,
+) = sys.argv[1:]
+
+data = json.loads(Path(path).read_text(encoding="utf-8"))
+repair = data.get("repair") or {}
+
+wanted_compliant = expected_compliant == "true"
+wanted_repairable = expected_repairable == "true"
+
+if expected_actions:
+    wanted_actions = expected_actions.split(",")
+else:
+    wanted_actions = []
+
+checks = (
+    ("compliant", data.get("compliant"), wanted_compliant),
+    (
+        "repairable",
+        repair.get("repairable"),
+        wanted_repairable,
+    ),
+    (
+        "actions",
+        repair.get("actions"),
+        wanted_actions,
+    ),
+)
+
+for name, actual, wanted in checks:
+    if actual != wanted:
+        raise SystemExit(
+            f"[FAIL] {name}: expected {wanted!r}, got {actual!r}"
+        )
+
+    print(f"[PASS] {name} = {actual!r}")
+
+reason = repair.get("reason")
+
+if expected_reason_mode == "none":
+    if reason is not None:
+        raise SystemExit(
+            f"[FAIL] reason: expected None, got {reason!r}"
+        )
+    print("[PASS] reason = None")
+
+elif expected_reason_mode == "platform-repair":
+    if not isinstance(reason, str) or "platform repair is required" not in reason:
+        raise SystemExit(
+            "[FAIL] refusal reason does not require platform repair"
+        )
+    print(f"[PASS] refusal reason = {reason}")
+
+else:
+    raise SystemExit(
+        f"[FAIL] unknown reason contract: {expected_reason_mode}"
+    )
+PYPLAN
+
+    rm -f "${CASE_JSON}"
+}
+
+
+run_plan_case "HEALTHY REPAIR PLAN" 0
+
+check_plan \
+    true \
+    true \
+    "" \
+    none
+
+
+run_plan_case \
+    "DISABLED TIMER REPAIR PLAN" \
+    1 \
+    disabled
+
+check_plan \
+    false \
+    true \
+    "enable" \
+    none
+
+
+run_plan_case \
+    "INACTIVE TIMER REPAIR PLAN" \
+    1 \
+    inactive
+
+check_plan \
+    false \
+    true \
+    "start" \
+    none
+
+
+run_plan_case \
+    "MISSING DROP-IN REPAIR PLAN" \
+    1 \
+    missing-dropin
+
+check_plan \
+    false \
+    true \
+    "write-dropin,daemon-reload,restart" \
+    none
+
+
+run_plan_case \
+    "WRONG DROP-IN REPAIR PLAN" \
+    1 \
+    wrong-dropin
+
+check_plan \
+    false \
+    true \
+    "write-dropin,daemon-reload,restart" \
+    none
+
+
+run_plan_case \
+    "WRONG EFFECTIVE INTERVAL REPAIR PLAN" \
+    1 \
+    wrong-effective-interval
+
+check_plan \
+    false \
+    true \
+    "write-dropin,daemon-reload,restart" \
+    none
+
+
+run_plan_case \
+    "MISSING FRAGMENT REPAIR REFUSAL" \
+    2 \
+    missing-fragment
+
+check_plan \
+    false \
+    false \
+    "" \
+    platform-repair
+
+
+run_plan_case \
+    "WRONG FRAGMENT REPAIR REFUSAL" \
+    2 \
+    wrong-fragment
+
+check_plan \
+    false \
+    false \
+    "" \
+    platform-repair
+
+
+echo
 echo "=== RESULT ==="
 echo "HomeLab Sentinel Discovery reconciliation regression PASSED"

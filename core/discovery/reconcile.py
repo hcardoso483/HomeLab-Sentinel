@@ -30,6 +30,8 @@ SIMULATIONS = (
     "missing-dropin",
     "wrong-dropin",
     "wrong-effective-interval",
+    "missing-fragment",
+    "wrong-fragment",
 )
 
 
@@ -249,6 +251,15 @@ def audit(config, simulation=None):
         facts["effective_interval_minutes"] = simulated_interval
         facts["interval_matches_policy"] = False
 
+    elif simulation == "missing-fragment":
+        facts["fragment_present"] = False
+        facts["fragment_matches"] = False
+        facts["loaded"] = False
+
+    elif simulation == "wrong-fragment":
+        facts["fragment_present"] = True
+        facts["fragment_matches"] = False
+
     compliant = all(
         (
             facts["policy_valid"],
@@ -270,6 +281,103 @@ def audit(config, simulation=None):
         "compliant": compliant,
         "facts": facts,
     }
+
+
+def repair_plan(result):
+    facts = result["facts"]
+
+    if result["compliant"]:
+        return {
+            "repairable": True,
+            "reason": None,
+            "actions": [],
+        }
+
+    if not facts["fragment_present"]:
+        return {
+            "repairable": False,
+            "reason": (
+                "canonical Discovery timer fragment is missing; "
+                "platform repair is required"
+            ),
+            "actions": [],
+        }
+
+    if not facts["fragment_matches"]:
+        return {
+            "repairable": False,
+            "reason": (
+                "Discovery timer fragment is not canonical; "
+                "platform repair is required"
+            ),
+            "actions": [],
+        }
+
+    if not facts["loaded"]:
+        return {
+            "repairable": False,
+            "reason": (
+                "Discovery timer is not loaded; "
+                "platform repair is required"
+            ),
+            "actions": [],
+        }
+
+    actions = []
+
+    schedule_drift = any(
+        (
+            not facts["dropin_present"],
+            not facts["dropin_registered"],
+            not facts["dropin_matches_policy"],
+            not facts["interval_matches_policy"],
+        )
+    )
+
+    if schedule_drift:
+        actions.extend(
+            (
+                "write-dropin",
+                "daemon-reload",
+            )
+        )
+
+    if not facts["enabled"]:
+        actions.append("enable")
+
+    if schedule_drift:
+        actions.append("restart")
+    elif not facts["active"]:
+        actions.append("start")
+
+    return {
+        "repairable": True,
+        "reason": None,
+        "actions": actions,
+    }
+
+
+def print_plan(result, plan):
+    print("HomeLab Sentinel Discovery Repair Plan")
+    print()
+    print(
+        "Audit              "
+        f"{'COMPLIANT' if result['compliant'] else 'DRIFT'}"
+    )
+    print(
+        "Repairable         "
+        f"{'YES' if plan['repairable'] else 'NO'}"
+    )
+
+    actions = plan["actions"]
+
+    if actions:
+        print(f"Actions            {', '.join(actions)}")
+    else:
+        print("Actions            NONE")
+
+    if plan["reason"]:
+        print(f"Reason             {plan['reason']}")
 
 
 def print_human(result):
@@ -342,7 +450,7 @@ def main():
 
     parser.add_argument(
         "action",
-        choices=("audit",),
+        choices=("audit", "plan"),
     )
 
     parser.add_argument(
@@ -375,18 +483,43 @@ def main():
         error(str(exc))
         return 2
 
+    if args.action == "audit":
+        if args.json:
+            print(
+                json.dumps(
+                    result,
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+        else:
+            print_human(result)
+
+        return 0 if result["compliant"] else 1
+
+    plan = repair_plan(result)
+
     if args.json:
+        payload = {
+            "version": 1,
+            "unit": result["unit"],
+            "compliant": result["compliant"],
+            "repair": plan,
+        }
         print(
             json.dumps(
-                result,
+                payload,
                 indent=2,
                 sort_keys=True,
             )
         )
     else:
-        print_human(result)
+        print_plan(result, plan)
 
-    return 0 if result["compliant"] else 1
+    if result["compliant"]:
+        return 0
+
+    return 1 if plan["repairable"] else 2
 
 
 if __name__ == "__main__":
