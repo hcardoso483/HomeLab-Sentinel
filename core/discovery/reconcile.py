@@ -2,9 +2,11 @@
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 APP_ROOT = Path("/opt/homelab-sentinel/app")
@@ -283,6 +285,186 @@ def audit(config, simulation=None):
     }
 
 
+def require_root_for_mutation():
+    if os.geteuid() != 0:
+        raise RuntimeError(
+            "Discovery scheduling repair requires root privileges"
+        )
+
+
+def run_checked_command(*args):
+    result = run_command(*args)
+
+    if result.returncode == 0:
+        return
+
+    detail = result.stderr.strip() or result.stdout.strip()
+
+    raise RuntimeError(
+        detail or f"Command failed: {' '.join(args)}"
+    )
+
+
+def write_canonical_dropin(config):
+    content = resolve_expected_dropin(config)
+
+    DROPIN.parent.mkdir(
+        mode=0o755,
+        parents=True,
+        exist_ok=True,
+    )
+
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=".schedule.conf.",
+        suffix=".tmp",
+        dir=DROPIN.parent,
+        text=True,
+    )
+
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as file:
+            file.write(content)
+            file.flush()
+            os.fsync(file.fileno())
+
+        os.chmod(temporary_name, 0o644)
+        os.replace(temporary_name, DROPIN)
+
+        directory_fd = os.open(DROPIN.parent, os.O_RDONLY)
+
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+
+    finally:
+        if os.path.exists(temporary_name):
+            os.unlink(temporary_name)
+
+
+def execute_repair_action(action, config):
+    if action == "write-dropin":
+        write_canonical_dropin(config)
+        return
+
+    if action == "daemon-reload":
+        run_checked_command(
+            "systemctl",
+            "daemon-reload",
+        )
+        return
+
+    if action == "enable":
+        run_checked_command(
+            "systemctl",
+            "enable",
+            TIMER_UNIT,
+        )
+        return
+
+    if action == "start":
+        run_checked_command(
+            "systemctl",
+            "start",
+            TIMER_UNIT,
+        )
+        return
+
+    if action == "restart":
+        run_checked_command(
+            "systemctl",
+            "restart",
+            TIMER_UNIT,
+        )
+        return
+
+    raise RuntimeError(
+        f"Unsupported Discovery repair action: {action}"
+    )
+
+
+def execute_repair(config, result, plan):
+    if result["compliant"]:
+        return {
+            "result": "not-needed",
+            "actions_executed": [],
+            "compliant": True,
+        }
+
+    if not plan["repairable"]:
+        return {
+            "result": "refused",
+            "actions_executed": [],
+            "compliant": False,
+            "reason": plan["reason"],
+        }
+
+    actions = list(plan["actions"])
+
+    if not actions:
+        return {
+            "result": "failed",
+            "actions_executed": [],
+            "compliant": False,
+            "reason": "repairable drift produced no repair actions",
+        }
+
+    require_root_for_mutation()
+
+    executed = []
+
+    for action in actions:
+        execute_repair_action(action, config)
+        executed.append(action)
+
+    final_result = audit(config)
+
+    return {
+        "result": (
+            "repaired"
+            if final_result["compliant"]
+            else "failed"
+        ),
+        "actions_executed": executed,
+        "compliant": final_result["compliant"],
+        "final_audit": final_result,
+    }
+
+
+def print_repair(result, plan, repair):
+    print("HomeLab Sentinel Discovery Repair")
+    print()
+    print(
+        "Initial audit      "
+        f"{'COMPLIANT' if result['compliant'] else 'DRIFT'}"
+    )
+    print(
+        "Repairable         "
+        f"{'YES' if plan['repairable'] else 'NO'}"
+    )
+
+    actions = plan["actions"]
+
+    if actions:
+        print(f"Planned actions    {', '.join(actions)}")
+    else:
+        print("Planned actions    NONE")
+
+    executed = repair.get("actions_executed") or []
+
+    if executed:
+        print(f"Executed actions   {', '.join(executed)}")
+    else:
+        print("Executed actions   NONE")
+
+    if repair.get("reason"):
+        print(f"Reason             {repair['reason']}")
+
+    result_value = repair["result"].upper().replace("-", " ")
+
+    print(f"Result             {result_value}")
+
+
 def repair_plan(result):
     facts = result["facts"]
 
@@ -450,7 +632,7 @@ def main():
 
     parser.add_argument(
         "action",
-        choices=("audit", "plan"),
+        choices=("audit", "plan", "repair"),
     )
 
     parser.add_argument(
@@ -477,6 +659,13 @@ def main():
         error(f"Discovery configuration not found: {args.config}")
         return 2
 
+    if args.action == "repair" and args.simulate is not None:
+        error(
+            "--simulate is not permitted with repair; "
+            "repair operates only on live observed state"
+        )
+        return 2
+
     try:
         result = audit(args.config, args.simulate)
     except RuntimeError as exc:
@@ -499,12 +688,54 @@ def main():
 
     plan = repair_plan(result)
 
+    if args.action == "plan":
+        if args.json:
+            payload = {
+                "version": 1,
+                "unit": result["unit"],
+                "compliant": result["compliant"],
+                "repair": plan,
+            }
+            print(
+                json.dumps(
+                    payload,
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+        else:
+            print_plan(result, plan)
+
+        if result["compliant"]:
+            return 0
+
+        return 1 if plan["repairable"] else 2
+
+    if not plan["repairable"]:
+        repair = {
+            "result": "refused",
+            "actions_executed": [],
+            "compliant": False,
+            "reason": plan["reason"],
+        }
+    else:
+        try:
+            repair = execute_repair(
+                args.config,
+                result,
+                plan,
+            )
+        except RuntimeError as exc:
+            error(str(exc))
+            return 2
+
     if args.json:
         payload = {
             "version": 1,
             "unit": result["unit"],
-            "compliant": result["compliant"],
-            "repair": plan,
+            "initial_compliant": result["compliant"],
+            "plan": plan,
+            "repair": repair,
         }
         print(
             json.dumps(
@@ -514,12 +745,18 @@ def main():
             )
         )
     else:
-        print_plan(result, plan)
+        print_repair(result, plan, repair)
 
-    if result["compliant"]:
+    if repair["result"] in {
+        "not-needed",
+        "repaired",
+    }:
         return 0
 
-    return 1 if plan["repairable"] else 2
+    if repair["result"] == "refused":
+        return 2
+
+    return 1
 
 
 if __name__ == "__main__":
