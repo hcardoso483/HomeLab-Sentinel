@@ -132,12 +132,25 @@ def parse_effective_interval(value):
     return None
 
 
-def expected_dropin(interval):
-    return (
-        "[Timer]\n"
-        "OnUnitActiveSec=\n"
-        f"OnUnitActiveSec={interval}min\n"
+def resolve_expected_dropin(config):
+    result = run_command(
+        str(SCHEDULE_HELPER),
+        "dropin",
+        "--config",
+        str(config),
     )
+
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+
+        if detail.startswith("[ERROR] "):
+            detail = detail[len("[ERROR] "):]
+
+        raise RuntimeError(
+            detail or "Unable to render Discovery schedule drop-in"
+        )
+
+    return result.stdout
 
 
 def read_dropin():
@@ -152,6 +165,7 @@ def read_dropin():
 
 def audit(config, simulation=None):
     desired_interval = resolve_desired_interval(config)
+    expected_dropin = resolve_expected_dropin(config)
 
     enabled_ok, enabled_value = systemctl_state("is-enabled")
     active_ok, active_value = systemctl_state("is-active")
@@ -170,7 +184,7 @@ def audit(config, simulation=None):
 
     actual_dropin = read_dropin()
     dropin_matches = (
-        actual_dropin == expected_dropin(desired_interval)
+        actual_dropin == expected_dropin
         if actual_dropin is not None
         else False
     )

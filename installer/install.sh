@@ -119,11 +119,9 @@ reconcile_discovery_schedule() {
         mktemp "${dropin_dir}/.schedule.conf.XXXXXX"
     )"
 
-    {
-        echo "[Timer]"
-        echo "OnUnitActiveSec="
-        echo "OnUnitActiveSec=${interval}min"
-    } > "${temporary_file}"
+    "${DISCOVERY_SCHEDULE_HELPER}" dropin \
+        --config "${DISCOVERY_CONFIG}" > "${temporary_file}" ||
+        die "Unable to render Discovery schedule drop-in."
 
     chmod 0644 "${temporary_file}"
     mv -f "${temporary_file}" "${dropin_file}"

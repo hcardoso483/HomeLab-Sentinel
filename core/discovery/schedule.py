@@ -10,7 +10,6 @@ import yaml
 MINIMUM_INTERVAL_MINUTES = 5
 DEFAULT_INTERVAL_MINUTES = 15
 MAXIMUM_INTERVAL_MINUTES = 30
-
 DEFAULT_CONFIG = Path(
     "/opt/homelab-sentinel/app/config/sentinel/discovery.yml"
 )
@@ -25,15 +24,23 @@ def load_interval(config_file):
         data = yaml.safe_load(file) or {}
 
     if not isinstance(data, dict):
-        raise ValueError("discovery configuration must be a YAML mapping")
+        raise ValueError(
+            "discovery configuration must be a YAML mapping"
+        )
 
     discovery = data.get("discovery")
+
     if not isinstance(discovery, dict):
-        raise ValueError("missing or invalid top-level field: discovery")
+        raise ValueError(
+            "missing or invalid top-level field: discovery"
+        )
 
     schedule = discovery.get("schedule")
+
     if not isinstance(schedule, dict):
-        raise ValueError("missing or invalid field: discovery.schedule")
+        raise ValueError(
+            "missing or invalid field: discovery.schedule"
+        )
 
     interval = schedule.get(
         "interval_minutes",
@@ -55,14 +62,24 @@ def load_interval(config_file):
     return interval
 
 
+def render_dropin(interval):
+    return (
+        "[Timer]\n"
+        "OnUnitActiveSec=\n"
+        f"OnUnitActiveSec={interval}min\n"
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="HomeLab Sentinel discovery scheduling policy"
     )
+
     parser.add_argument(
         "action",
-        choices=("validate", "interval"),
+        choices=("validate", "interval", "dropin"),
     )
+
     parser.add_argument(
         "--config",
         type=Path,
@@ -72,7 +89,9 @@ def main():
     args = parser.parse_args()
 
     if not args.config.is_file():
-        error(f"Discovery configuration not found: {args.config}")
+        error(
+            f"Discovery configuration not found: {args.config}"
+        )
         return 1
 
     try:
@@ -90,7 +109,11 @@ def main():
         )
         return 0
 
-    print(interval)
+    if args.action == "interval":
+        print(interval)
+        return 0
+
+    sys.stdout.write(render_dropin(interval))
     return 0
 
 
