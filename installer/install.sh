@@ -11,6 +11,7 @@ SYSUSERS_TARGET="/etc/sysusers.d/homelab-sentinel.conf"
 
 API_UNIT="homelab-sentinel-api.service"
 VERIFY_UNIT="homelab-sentinel-verify.service"
+DISCOVERY_UNIT="homelab-sentinel-discovery.service"
 
 DEPENDENCY_MANAGER="${SCRIPT_DIR}/dependencies.py"
 INVENTORY_MANAGER="${SCRIPT_DIR}/inventory.py"
@@ -130,6 +131,7 @@ require_file "${APP_ROOT}/api/server.py"
 require_file "${APP_ROOT}/scripts/verify-sentinel.sh"
 require_file "${SYSTEMD_SOURCE}/${API_UNIT}"
 require_file "${SYSTEMD_SOURCE}/${VERIFY_UNIT}"
+require_file "${SYSTEMD_SOURCE}/${DISCOVERY_UNIT}"
 
 log_pass "Platform prerequisites validated."
 
@@ -139,6 +141,7 @@ log_pass "HomeLab Sentinel CLI installed: ${HLS_TARGET}"
 
 install_unit "${API_UNIT}"
 install_unit "${VERIFY_UNIT}"
+install_unit "${DISCOVERY_UNIT}"
 
 log_info "Reloading systemd..."
 systemctl daemon-reload
@@ -150,6 +153,10 @@ log_info "Starting Core API..."
 systemctl restart "${API_UNIT}"
 
 wait_for_api
+
+log_info "Running initial managed discovery..."
+
+systemctl start "${DISCOVERY_UNIT}"
 
 log_info "Enabling post-boot verification..."
 systemctl enable "${VERIFY_UNIT}"

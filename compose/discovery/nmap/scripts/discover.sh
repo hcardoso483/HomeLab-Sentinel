@@ -22,4 +22,4 @@ if [[ ! -x "${NORMALIZER}" ]]; then
     exit 1
 fi
 
-nmap -sn -oX - -- "${TARGET}" | "${NORMALIZER}"
+nmap --privileged -sn -oX - -- "${TARGET}" | "${NORMALIZER}"
