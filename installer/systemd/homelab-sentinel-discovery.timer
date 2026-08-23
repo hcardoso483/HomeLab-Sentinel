@@ -1,0 +1,11 @@
+[Unit]
+Description=HomeLab Sentinel Discovery Scheduler
+
+[Timer]
+OnActiveSec=5min
+OnUnitActiveSec=15min
+AccuracySec=1min
+Unit=homelab-sentinel-discovery.service
+
+[Install]
+WantedBy=timers.target

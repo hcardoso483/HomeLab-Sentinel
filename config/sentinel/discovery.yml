@@ -1,0 +1,8 @@
+# HomeLab Sentinel discovery configuration
+#
+# Discovery scheduling is mandatory.
+# The interval may be configured between 5 and 30 minutes.
+
+discovery:
+  schedule:
+    interval_minutes: 15

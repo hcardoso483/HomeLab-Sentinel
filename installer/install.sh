@@ -12,9 +12,12 @@ SYSUSERS_TARGET="/etc/sysusers.d/homelab-sentinel.conf"
 API_UNIT="homelab-sentinel-api.service"
 VERIFY_UNIT="homelab-sentinel-verify.service"
 DISCOVERY_UNIT="homelab-sentinel-discovery.service"
+DISCOVERY_TIMER="homelab-sentinel-discovery.timer"
 
 DEPENDENCY_MANAGER="${SCRIPT_DIR}/dependencies.py"
 INVENTORY_MANAGER="${SCRIPT_DIR}/inventory.py"
+DISCOVERY_SCHEDULE_HELPER="${APP_ROOT}/core/discovery/schedule.py"
+DISCOVERY_CONFIG="${APP_ROOT}/config/sentinel/discovery.yml"
 HLS_SOURCE="${SCRIPT_DIR}/hls"
 HLS_TARGET="/usr/local/bin/hls"
 API_HEALTH_URL="http://127.0.0.1:8000/api/v1/health"
@@ -93,6 +96,42 @@ reconcile_sentinel_state_ownership() {
     log_pass "Sentinel state ownership ready: ${SERVICE_USER}:${SERVICE_GROUP}"
 }
 
+
+reconcile_discovery_schedule() {
+    local interval
+    local dropin_dir
+    local dropin_file
+    local temporary_file
+
+    interval="$(
+        "${DISCOVERY_SCHEDULE_HELPER}" interval \
+            --config "${DISCOVERY_CONFIG}"
+    )" || die "Unable to resolve Discovery scheduling policy."
+
+    dropin_dir="${SYSTEMD_TARGET}/${DISCOVERY_TIMER}.d"
+    dropin_file="${dropin_dir}/schedule.conf"
+
+    log_info "Reconciling Discovery schedule: ${interval} minutes"
+
+    install -d -m 0755 "${dropin_dir}"
+
+    temporary_file="$(
+        mktemp "${dropin_dir}/.schedule.conf.XXXXXX"
+    )"
+
+    {
+        echo "[Timer]"
+        echo "OnUnitActiveSec="
+        echo "OnUnitActiveSec=${interval}min"
+    } > "${temporary_file}"
+
+    chmod 0644 "${temporary_file}"
+    mv -f "${temporary_file}" "${dropin_file}"
+
+    log_pass "Discovery schedule ready: ${interval} minutes"
+}
+
+
 echo "HomeLab Sentinel Platform Bootstrap"
 echo
 
@@ -100,11 +139,18 @@ require_root
 
 require_file "${DEPENDENCY_MANAGER}"
 require_file "${INVENTORY_MANAGER}"
+require_file "${DISCOVERY_SCHEDULE_HELPER}"
+require_file "${DISCOVERY_CONFIG}"
 require_file "${SYSUSERS_SOURCE}"
 require_file "${HLS_SOURCE}"
 
 log_info "Checking mandatory Sentinel dependencies..."
 "${DEPENDENCY_MANAGER}" --recover
+
+log_info "Validating Discovery scheduling policy..."
+"${DISCOVERY_SCHEDULE_HELPER}" validate \
+    --config "${DISCOVERY_CONFIG}" ||
+    die "Discovery scheduling policy validation failed."
 
 log_info "Preparing Sentinel inventory state..."
 "${INVENTORY_MANAGER}"
@@ -132,6 +178,7 @@ require_file "${APP_ROOT}/scripts/verify-sentinel.sh"
 require_file "${SYSTEMD_SOURCE}/${API_UNIT}"
 require_file "${SYSTEMD_SOURCE}/${VERIFY_UNIT}"
 require_file "${SYSTEMD_SOURCE}/${DISCOVERY_UNIT}"
+require_file "${SYSTEMD_SOURCE}/${DISCOVERY_TIMER}"
 
 log_pass "Platform prerequisites validated."
 
@@ -142,6 +189,9 @@ log_pass "HomeLab Sentinel CLI installed: ${HLS_TARGET}"
 install_unit "${API_UNIT}"
 install_unit "${VERIFY_UNIT}"
 install_unit "${DISCOVERY_UNIT}"
+install_unit "${DISCOVERY_TIMER}"
+
+reconcile_discovery_schedule
 
 log_info "Reloading systemd..."
 systemctl daemon-reload
@@ -153,6 +203,10 @@ log_info "Starting Core API..."
 systemctl restart "${API_UNIT}"
 
 wait_for_api
+
+log_info "Enabling Discovery scheduler..."
+
+systemctl enable --now "${DISCOVERY_TIMER}"
 
 log_info "Running initial managed discovery..."
 
