@@ -73,6 +73,11 @@ require_contains \
 
 require_contains \
     "${CASE_OUTPUT}" \
+    "Schedule policy      COMPLIANT" \
+    "healthy Discovery schedule policy"
+
+require_contains \
+    "${CASE_OUTPUT}" \
     "Runtime              HEALTHY" \
     "healthy Discovery runtime"
 
@@ -162,6 +167,36 @@ require_contains \
     "Overall remains ready while Discovery runs"
 
 run_case \
+    "DISCOVERY SCHEDULE DRIFT" \
+    1 \
+    --simulate discovery-schedule-drift
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Scheduler            ACTIVE" \
+    "scheduler remains active during policy drift"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Schedule             ENABLED" \
+    "schedule remains enabled during policy drift"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Schedule policy      DRIFT" \
+    "Discovery schedule policy drift detected"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Runtime              HEALTHY" \
+    "historical Discovery runtime remains healthy during policy drift"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "  DEGRADED" \
+    "Overall degraded by Discovery schedule policy drift"
+
+run_case \
     "DISCOVERY RECOVERING" \
     1 \
     --simulate discovery-recovering
@@ -200,6 +235,11 @@ require_contains \
     "${CASE_OUTPUT}" \
     "Schedule             DISABLED" \
     "disabled schedule detected"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Schedule policy      COMPLIANT" \
+    "disabled scheduler remains distinct from policy drift"
 
 require_contains \
     "${CASE_OUTPUT}" \

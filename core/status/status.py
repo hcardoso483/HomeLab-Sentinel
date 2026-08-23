@@ -16,7 +16,7 @@ DISCOVERY_STATE = Path(
 API_UNIT = "homelab-sentinel-api.service"
 VERIFY_UNIT = "homelab-sentinel-verify.service"
 DISCOVERY_UNIT = "homelab-sentinel-discovery.service"
-DISCOVERY_TIMER = "homelab-sentinel-discovery.timer"
+DISCOVERY_RECONCILER = APP_ROOT / "core/discovery/reconcile.py"
 EXPECTED_USER = "homelab-sentinel"
 EXPECTED_GROUP = "homelab-sentinel"
 API_HEALTH_URL = "http://127.0.0.1:8000/api/v1/health"
@@ -31,6 +31,7 @@ SIMULATIONS = (
     "discovery-recovering",
     "discovery-running",
     "discovery-scheduler-disabled",
+    "discovery-schedule-drift",
     "discovery-state-unreadable",
 )
 
@@ -84,6 +85,35 @@ def api_health():
             return payload.get("status") == "ok"
     except (urllib.error.URLError, TimeoutError, ValueError, OSError):
         return False
+
+
+def discovery_reconciliation_status():
+    result = run_command(
+        str(DISCOVERY_RECONCILER),
+        "audit",
+        "--json",
+    )
+
+    if result.returncode not in (0, 1):
+        return None
+
+    try:
+        payload = json.loads(result.stdout)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+    facts = payload.get("facts")
+    if not isinstance(facts, dict):
+        return None
+
+    if payload.get("version") != 1:
+        return None
+
+    return {
+        "compliant": payload.get("compliant") is True,
+        "active": facts.get("active") is True,
+        "enabled": facts.get("enabled") is True,
+    }
 
 
 def discovery_runtime_status():
@@ -180,6 +210,7 @@ def main():
         print("Discovery")
         status.ready("Scheduler", "N/A")
         status.ready("Schedule", "N/A")
+        status.ready("Schedule policy", "N/A")
         status.ready("Runtime", "N/A")
         status.ready("Provider", "N/A")
         status.ready("Last run", "N/A")
@@ -249,29 +280,24 @@ def main():
     print()
     print("Discovery")
 
-    scheduler_active_result = run_command(
-        "systemctl",
-        "is-active",
-        DISCOVERY_TIMER,
-    )
-    scheduler_enabled_result = run_command(
-        "systemctl",
-        "is-enabled",
-        DISCOVERY_TIMER,
-    )
+    reconciliation = discovery_reconciliation_status()
 
-    scheduler_active = (
-        scheduler_active_result.returncode == 0
-        and scheduler_active_result.stdout.strip() == "active"
-    )
-    scheduler_enabled = (
-        scheduler_enabled_result.returncode == 0
-        and scheduler_enabled_result.stdout.strip() == "enabled"
-    )
+    if reconciliation is None:
+        scheduler_active = False
+        scheduler_enabled = False
+        schedule_compliant = False
+        reconciliation_readable = False
+    else:
+        scheduler_active = reconciliation["active"]
+        scheduler_enabled = reconciliation["enabled"]
+        schedule_compliant = reconciliation["compliant"]
+        reconciliation_readable = True
 
     if simulation == "discovery-scheduler-disabled":
         scheduler_active = False
         scheduler_enabled = False
+    elif simulation == "discovery-schedule-drift":
+        schedule_compliant = False
 
     if scheduler_active:
         status.ready("Scheduler", "ACTIVE")
@@ -282,6 +308,13 @@ def main():
         status.ready("Schedule", "ENABLED")
     else:
         status.fail("Schedule", "DISABLED")
+
+    if not reconciliation_readable:
+        status.fail("Schedule policy", "UNKNOWN")
+    elif schedule_compliant:
+        status.ready("Schedule policy", "COMPLIANT")
+    else:
+        status.fail("Schedule policy", "DRIFT")
 
     discovery = discovery_runtime_status()
 
