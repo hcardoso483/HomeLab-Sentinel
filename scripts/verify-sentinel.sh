@@ -7,6 +7,9 @@ DATABASE="${DATABASE:-/srv/homelab-sentinel/sentinel/inventory.db}"
 REGRESSION_TEST="${REGRESSION_TEST:-${APP_ROOT}/tests/test_core_api.sh}"
 STATUS_TEST="${STATUS_TEST:-${APP_ROOT}/tests/test_status.sh}"
 CORRELATION_TEST="${CORRELATION_TEST:-${APP_ROOT}/tests/test_correlation.sh}"
+DISCOVERY_CONTRACT_TEST="${DISCOVERY_CONTRACT_TEST:-${APP_ROOT}/tests/test_discovery_contracts.sh}"
+DISCOVERY_PIPELINE_TEST="${DISCOVERY_PIPELINE_TEST:-${APP_ROOT}/tests/test_discovery_pipeline.sh}"
+DISCOVERY_RECONCILE_TEST="${DISCOVERY_RECONCILE_TEST:-${APP_ROOT}/tests/test_discovery_reconcile.sh}"
 HLS_SOURCE="${HLS_SOURCE:-${APP_ROOT}/installer/hls}"
 HLS_INSTALLED="${HLS_INSTALLED:-/usr/local/bin/hls}"
 HLS_COMMAND_TIMEOUT="${HLS_COMMAND_TIMEOUT:-10}"
@@ -78,6 +81,9 @@ check_file "${APP_ROOT}/core/inventory/schema.sql" "Inventory schema present"
 check_file "${REGRESSION_TEST}" "Core API regression test present"
 check_file "${CORRELATION_TEST}" "Correlation regression test present"
 check_file "${STATUS_TEST}" "Status regression test present"
+check_file "${DISCOVERY_CONTRACT_TEST}" "Discovery contract regression test present"
+check_file "${DISCOVERY_PIPELINE_TEST}" "Discovery pipeline regression test present"
+check_file "${DISCOVERY_RECONCILE_TEST}" "Discovery reconciliation regression test present"
 check_file "${APP_ROOT}/scripts/wait-core-api.sh" "Core API readiness helper present"
 
 check_executable "${APP_ROOT}/api/server.py" "Core API server executable"
@@ -85,6 +91,9 @@ check_executable "${APP_ROOT}/core/inventory/inventory.py" "Living Inventory CLI
 check_executable "${REGRESSION_TEST}" "Core API regression test executable"
 check_executable "${CORRELATION_TEST}" "Correlation regression test executable"
 check_executable "${STATUS_TEST}" "Status regression test executable"
+check_executable "${DISCOVERY_CONTRACT_TEST}" "Discovery contract regression test executable"
+check_executable "${DISCOVERY_PIPELINE_TEST}" "Discovery pipeline regression test executable"
+check_executable "${DISCOVERY_RECONCILE_TEST}" "Discovery reconciliation regression test executable"
 check_executable "${APP_ROOT}/scripts/wait-core-api.sh" "Core API readiness helper executable"
 
 section "HLS CLI"
@@ -256,6 +265,42 @@ PY
         fail "Unable to inspect inventory database in read-only mode"
         [[ -n "${DB_RESULT}" ]] && echo "${DB_RESULT}" >&2
     fi
+fi
+
+section "DISCOVERY CONTRACT REGRESSION"
+
+if [[ -x "${DISCOVERY_CONTRACT_TEST}" ]]; then
+    if "${DISCOVERY_CONTRACT_TEST}"; then
+        pass "Discovery contract regression suite"
+    else
+        fail "Discovery contract regression suite"
+    fi
+else
+    fail "Discovery contract regression test cannot run: ${DISCOVERY_CONTRACT_TEST}"
+fi
+
+section "DISCOVERY PIPELINE REGRESSION"
+
+if [[ -x "${DISCOVERY_PIPELINE_TEST}" ]]; then
+    if "${DISCOVERY_PIPELINE_TEST}"; then
+        pass "Discovery pipeline regression suite"
+    else
+        fail "Discovery pipeline regression suite"
+    fi
+else
+    fail "Discovery pipeline regression test cannot run: ${DISCOVERY_PIPELINE_TEST}"
+fi
+
+section "DISCOVERY RECONCILIATION REGRESSION"
+
+if [[ -x "${DISCOVERY_RECONCILE_TEST}" ]]; then
+    if "${DISCOVERY_RECONCILE_TEST}"; then
+        pass "Discovery reconciliation regression suite"
+    else
+        fail "Discovery reconciliation regression suite"
+    fi
+else
+    fail "Discovery reconciliation regression test cannot run: ${DISCOVERY_RECONCILE_TEST}"
 fi
 
 section "CORRELATION REGRESSION"
