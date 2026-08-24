@@ -32,6 +32,7 @@ SIMULATIONS = (
     "missing-dropin",
     "wrong-dropin",
     "wrong-effective-interval",
+    "missing-initial-trigger",
     "missing-fragment",
     "wrong-fragment",
 )
@@ -78,6 +79,33 @@ def resolve_desired_interval(config):
         ) from exc
 
 
+def resolve_desired_initial_delay(config):
+    result = run_command(
+        str(SCHEDULE_HELPER),
+        "initial-delay",
+        "--config",
+        str(config),
+    )
+
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+
+        if detail.startswith("[ERROR] "):
+            detail = detail[len("[ERROR] "):]
+
+        raise RuntimeError(
+            detail or "Unable to resolve Discovery initial delay"
+        )
+
+    try:
+        return int(result.stdout.strip())
+    except ValueError as exc:
+        raise RuntimeError(
+            "Discovery scheduling helper returned "
+            f"an invalid initial delay: {result.stdout.strip()!r}"
+        ) from exc
+
+
 def systemctl_value(property_name):
     result = run_command(
         "systemctl",
@@ -106,12 +134,12 @@ def systemctl_state(command):
     )
 
 
-def parse_effective_interval(value):
+def parse_timer_minutes(value, property_name):
     if not value:
         return None
 
     match = re.search(
-        r"(?:^|[ {;])OnUnitActiveUSec=([^ ;}]+)",
+        rf"(?:^|[ {{;]){re.escape(property_name)}=([^ ;}}]+)",
         value,
     )
 
@@ -134,6 +162,14 @@ def parse_effective_interval(value):
             return seconds // 60
 
     return None
+
+
+def parse_effective_initial_delay(value):
+    return parse_timer_minutes(value, "OnActiveUSec")
+
+
+def parse_effective_interval(value):
+    return parse_timer_minutes(value, "OnUnitActiveUSec")
 
 
 def resolve_expected_dropin(config):
@@ -169,6 +205,7 @@ def read_dropin():
 
 def audit(config, simulation=None):
     desired_interval = resolve_desired_interval(config)
+    desired_initial_delay = resolve_desired_initial_delay(config)
     expected_dropin = resolve_expected_dropin(config)
 
     enabled_ok, enabled_value = systemctl_state("is-enabled")
@@ -178,6 +215,10 @@ def audit(config, simulation=None):
     fragment_path = systemctl_value("FragmentPath")
     dropin_paths = systemctl_value("DropInPaths")
     timers_monotonic = systemctl_value("TimersMonotonic")
+
+    effective_initial_delay = parse_effective_initial_delay(
+        timers_monotonic
+    )
 
     effective_interval = parse_effective_interval(
         timers_monotonic
@@ -190,6 +231,12 @@ def audit(config, simulation=None):
     dropin_matches = (
         actual_dropin == expected_dropin
         if actual_dropin is not None
+        else False
+    )
+
+    initial_trigger_matches = (
+        effective_initial_delay == desired_initial_delay
+        if effective_initial_delay is not None
         else False
     )
 
@@ -217,6 +264,9 @@ def audit(config, simulation=None):
 
     facts = {
         "policy_valid": True,
+        "desired_initial_delay_minutes": desired_initial_delay,
+        "effective_initial_delay_minutes": effective_initial_delay,
+        "initial_trigger_matches_policy": initial_trigger_matches,
         "desired_interval_minutes": desired_interval,
         "effective_interval_minutes": effective_interval,
         "fragment_present": fragment_present,
@@ -244,6 +294,10 @@ def audit(config, simulation=None):
     elif simulation == "wrong-dropin":
         facts["dropin_matches_policy"] = False
 
+    elif simulation == "missing-initial-trigger":
+        facts["effective_initial_delay_minutes"] = None
+        facts["initial_trigger_matches_policy"] = False
+
     elif simulation == "wrong-effective-interval":
         simulated_interval = (
             desired_interval + 5
@@ -270,6 +324,7 @@ def audit(config, simulation=None):
             facts["dropin_present"],
             facts["dropin_registered"],
             facts["dropin_matches_policy"],
+            facts["initial_trigger_matches_policy"],
             facts["interval_matches_policy"],
             facts["loaded"],
             facts["enabled"],
@@ -512,6 +567,7 @@ def repair_plan(result):
             not facts["dropin_present"],
             not facts["dropin_registered"],
             not facts["dropin_matches_policy"],
+            not facts["initial_trigger_matches_policy"],
             not facts["interval_matches_policy"],
         )
     )
@@ -567,6 +623,25 @@ def print_human(result):
 
     print("HomeLab Sentinel Discovery Reconciliation Audit")
     print()
+    print(
+        f"Initial delay      "
+        f"{facts['desired_initial_delay_minutes']} min"
+    )
+
+    effective_initial = facts["effective_initial_delay_minutes"]
+
+    if effective_initial is None:
+        effective_initial_text = "UNKNOWN"
+    else:
+        effective_initial_text = f"{effective_initial} min"
+
+    print(f"Effective initial  {effective_initial_text}")
+
+    print(
+        f"Initial policy     "
+        f"{'MATCH' if facts['initial_trigger_matches_policy'] else 'DRIFT'}"
+    )
+
     print(
         f"Desired interval   "
         f"{facts['desired_interval_minutes']} min"

@@ -95,6 +95,7 @@ fact_expectations = {
     "dropin_present": True,
     "dropin_registered": True,
     "dropin_matches_policy": True,
+    "initial_trigger_matches_policy": True,
     "interval_matches_policy": True,
     "loaded": True,
     "enabled": True,
@@ -282,6 +283,41 @@ print("[PASS] interval_matches_policy = False")
 print("[PASS] dropin_matches_policy = True")
 print("[PASS] compliant = False")
 PY
+
+rm -f "${CASE_JSON}"
+
+run_json_case \
+    "MISSING INITIAL TRIGGER" \
+    1 \
+    "missing-initial-trigger"
+
+python3 - "${CASE_JSON}" <<'PY_CHECK'
+import json
+import sys
+from pathlib import Path
+
+data = json.loads(Path(sys.argv[1]).read_text())
+facts = data["facts"]
+
+if facts.get("initial_trigger_matches_policy") is not False:
+    raise SystemExit(
+        "[FAIL] missing initial trigger was not detected"
+    )
+
+if facts.get("interval_matches_policy") is not True:
+    raise SystemExit(
+        "[FAIL] recurring interval should remain matched"
+    )
+
+if data.get("compliant") is not False:
+    raise SystemExit(
+        "[FAIL] missing initial trigger must be drift"
+    )
+
+print("[PASS] initial_trigger_matches_policy = False")
+print("[PASS] interval_matches_policy = True")
+print("[PASS] compliant = False")
+PY_CHECK
 
 rm -f "${CASE_JSON}"
 
@@ -476,6 +512,18 @@ run_plan_case \
     "WRONG EFFECTIVE INTERVAL REPAIR PLAN" \
     1 \
     wrong-effective-interval
+
+check_plan \
+    false \
+    true \
+    "write-dropin,daemon-reload,restart" \
+    none
+
+
+run_plan_case \
+    "MISSING INITIAL TRIGGER REPAIR PLAN" \
+    1 \
+    missing-initial-trigger
 
 check_plan \
     false \

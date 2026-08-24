@@ -7,9 +7,11 @@ from pathlib import Path
 import yaml
 
 
+INITIAL_DELAY_MINUTES = 5
 MINIMUM_INTERVAL_MINUTES = 5
 DEFAULT_INTERVAL_MINUTES = 15
 MAXIMUM_INTERVAL_MINUTES = 30
+
 DEFAULT_CONFIG = Path(
     "/opt/homelab-sentinel/app/config/sentinel/discovery.yml"
 )
@@ -65,7 +67,8 @@ def load_interval(config_file):
 def render_dropin(interval):
     return (
         "[Timer]\n"
-        "OnUnitActiveSec=\n"
+        "OnActiveSec=\n"
+        f"OnActiveSec={INITIAL_DELAY_MINUTES}min\n"
         f"OnUnitActiveSec={interval}min\n"
     )
 
@@ -77,7 +80,12 @@ def main():
 
     parser.add_argument(
         "action",
-        choices=("validate", "interval", "dropin"),
+        choices=(
+            "validate",
+            "interval",
+            "initial-delay",
+            "dropin",
+        ),
     )
 
     parser.add_argument(
@@ -103,7 +111,8 @@ def main():
     if args.action == "validate":
         print(
             "[PASS] Discovery scheduling policy valid: "
-            f"{interval} minutes "
+            f"initial {INITIAL_DELAY_MINUTES} minutes, "
+            f"interval {interval} minutes "
             f"(allowed {MINIMUM_INTERVAL_MINUTES}-"
             f"{MAXIMUM_INTERVAL_MINUTES})"
         )
@@ -111,6 +120,10 @@ def main():
 
     if args.action == "interval":
         print(interval)
+        return 0
+
+    if args.action == "initial-delay":
+        print(INITIAL_DELAY_MINUTES)
         return 0
 
     sys.stdout.write(render_dropin(interval))
