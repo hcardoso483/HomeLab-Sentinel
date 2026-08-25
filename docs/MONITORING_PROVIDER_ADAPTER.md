@@ -87,6 +87,41 @@ UNKNOWN / HEALTHY / DEGRADED / DOWN
 
 remain conclusions owned exclusively by Monitoring Core health evaluation.
 
+## Live provider input
+
+The Prometheus adapter supports two provider-input modes:
+
+```text
+--fixture PATH
+```
+
+loads a deterministic Prometheus HTTP API response from disk for regression
+testing.
+
+```text
+--live
+```
+
+performs a read-only Prometheus instant query against `/api/v1/query`.
+
+Live mode MUST preserve the same canonical observation output contract as
+fixture mode.
+
+When a Prometheus query returns multiple vector results, the adapter MUST NOT
+guess which result belongs to a Sentinel entity. The caller MAY constrain the
+result with provider labels such as `instance` and `job`. If selection does not
+resolve to exactly one result, observation status is `unknown`.
+
+Failure to contact the Prometheus API is a provider-query failure. The adapter
+MUST fail rather than inventing an entity observation.
+
+Live input does not authorize the adapter to:
+
+- modify Prometheus configuration
+- write Monitoring evidence directly
+- schedule collection
+- derive Monitoring Core health
+
 ## Initial integration scope
 
 Slice 5 proves the adapter contract using deterministic Prometheus HTTP API
