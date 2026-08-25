@@ -6,6 +6,7 @@ APP_ROOT = Path("/opt/homelab-sentinel/app")
 DEFAULT_DATABASE = Path("/srv/homelab-sentinel/sentinel/inventory.db")
 INVENTORY = APP_ROOT / "core" / "inventory" / "inventory.py"
 RESOLVER = APP_ROOT / "core" / "resolver" / "resolver.sh"
+HEALTH = APP_ROOT / "core" / "monitoring" / "evaluate.py"
 
 def error(message):
     print(f"[ERROR] {message}", file=sys.stderr)
@@ -196,7 +197,7 @@ def main():
         "command",
         nargs="?",
         default="targets",
-        choices=("targets", "provider"),
+        choices=("targets", "provider", "health"),
         help="Monitoring query command (default: targets)",
     )
     parser.add_argument(
@@ -216,6 +217,21 @@ def main():
             else:
                 emit_provider_human(provider)
             return 0
+
+        if args.command == "health":
+            if not HEALTH.is_file():
+                raise RuntimeError(
+                    f"Monitoring health evaluator not found: {HEALTH}"
+                )
+            command = [
+                str(HEALTH),
+                "--database",
+                str(args.database),
+            ]
+            if args.json:
+                command.append("--json")
+            result = subprocess.run(command, check=False)
+            return result.returncode
 
         if not args.database.is_file():
             error(f"Inventory database not found: {args.database}")
