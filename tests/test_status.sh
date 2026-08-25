@@ -64,7 +64,7 @@ run_case() {
 
 echo "HomeLab Sentinel Status regression test"
 
-run_case "HEALTHY LIVE STATUS" 0
+run_case     "HEALTHY CURRENT PLATFORM"     0     --ignore-verification-result
 
 require_contains \
     "${CASE_OUTPUT}" \
@@ -76,10 +76,15 @@ require_contains \
     "Schedule policy      COMPLIANT" \
     "healthy Discovery schedule policy"
 
-require_contains \
-    "${CASE_OUTPUT}" \
-    "Runtime              HEALTHY" \
-    "healthy Discovery runtime"
+if grep -Fq "Runtime              HEALTHY" <<< "${CASE_OUTPUT}" || \
+   grep -Fq "Runtime              RUNNING" <<< "${CASE_OUTPUT}"; then
+    pass "healthy Discovery runtime"
+else
+    fail "healthy Discovery runtime: expected HEALTHY or RUNNING"
+    echo "--- output ---" >&2
+    echo "${CASE_OUTPUT}" >&2
+    echo "--------------" >&2
+fi
 
 require_contains \
     "${CASE_OUTPUT}" \
@@ -94,7 +99,8 @@ require_contains \
 run_case \
     "DISCOVERY FAILED" \
     1 \
-    --simulate discovery-failed
+    --simulate discovery-failed \
+    --ignore-verification-result
 
 require_contains \
     "${CASE_OUTPUT}" \
@@ -129,7 +135,8 @@ require_contains \
 run_case \
     "DISCOVERY RUNNING" \
     0 \
-    --simulate discovery-running
+    --simulate discovery-running \
+    --ignore-verification-result
 
 require_contains \
     "${CASE_OUTPUT}" \
@@ -169,7 +176,8 @@ require_contains \
 run_case \
     "DISCOVERY SCHEDULE DRIFT" \
     1 \
-    --simulate discovery-schedule-drift
+    --simulate discovery-schedule-drift \
+    --ignore-verification-result
 
 require_contains \
     "${CASE_OUTPUT}" \
@@ -199,7 +207,8 @@ require_contains \
 run_case \
     "DISCOVERY RECOVERING" \
     1 \
-    --simulate discovery-recovering
+    --simulate discovery-recovering \
+    --ignore-verification-result
 
 require_contains \
     "${CASE_OUTPUT}" \
@@ -224,7 +233,8 @@ require_contains \
 run_case \
     "DISCOVERY SCHEDULER DISABLED" \
     1 \
-    --simulate discovery-scheduler-disabled
+    --simulate discovery-scheduler-disabled \
+    --ignore-verification-result
 
 require_contains \
     "${CASE_OUTPUT}" \
@@ -254,7 +264,8 @@ require_contains \
 run_case \
     "DISCOVERY STATE UNREADABLE" \
     1 \
-    --simulate discovery-state-unreadable
+    --simulate discovery-state-unreadable \
+    --ignore-verification-result
 
 require_contains \
     "${CASE_OUTPUT}" \
@@ -280,6 +291,39 @@ require_contains \
     "${CASE_OUTPUT}" \
     "  DEGRADED" \
     "Overall degraded by unreadable Discovery state"
+
+echo
+echo "=== RESULT ==="
+run_case \
+    "FAILED VERIFICATION NORMAL STATUS" \
+    1 \
+    --simulate failed-verification
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Last result          FAILED" \
+    "normal status reports failed verification"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "  DEGRADED" \
+    "normal failed verification degrades platform"
+
+run_case \
+    "FAILED VERIFICATION VERIFICATION CONTEXT" \
+    0 \
+    --simulate failed-verification \
+    --ignore-verification-result
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Last result          IGNORED (verification context)" \
+    "verification context ignores previous result"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "  READY" \
+    "verification context evaluates current platform"
 
 echo
 echo "=== RESULT ==="

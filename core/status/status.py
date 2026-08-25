@@ -172,8 +172,17 @@ def main():
         choices=SIMULATIONS,
         help="TEST ONLY: simulate one platform status condition",
     )
+    parser.add_argument(
+        "--ignore-verification-result",
+        action="store_true",
+        help=(
+            "Ignore the previous post-boot verification result when "
+            "evaluating current platform readiness"
+        ),
+    )
     args = parser.parse_args()
     simulation = args.simulate
+    ignore_verification_result = args.ignore_verification_result
 
     if simulation:
         print(f"[TEST] Status simulation enabled: {simulation}")
@@ -480,7 +489,12 @@ def main():
         verify_result = "exit-code"
         verify_exit = "1"
 
-    if verify_result == "success" and verify_exit == "0":
+    if ignore_verification_result:
+        status.ready(
+            "Last result",
+            "IGNORED (verification context)",
+        )
+    elif verify_result == "success" and verify_exit == "0":
         status.ready("Last result", "SUCCESS")
     elif verify_result is None or verify_exit is None:
         status.fail("Last result", "UNKNOWN")

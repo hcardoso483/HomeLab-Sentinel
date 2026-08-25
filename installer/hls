@@ -252,7 +252,7 @@ command_status() {
     local status_engine="${APP_ROOT}/core/status/status.py"
     require_file "${status_engine}"
 
-    exec "${status_engine}"
+    exec "${status_engine}" "$@"
 }
 
 command_verify() {

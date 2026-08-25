@@ -13,6 +13,7 @@ DISCOVERY_RECONCILE_TEST="${DISCOVERY_RECONCILE_TEST:-${APP_ROOT}/tests/test_dis
 HLS_SOURCE="${HLS_SOURCE:-${APP_ROOT}/installer/hls}"
 HLS_INSTALLED="${HLS_INSTALLED:-/usr/local/bin/hls}"
 HLS_COMMAND_TIMEOUT="${HLS_COMMAND_TIMEOUT:-10}"
+BOOT_READY_CHECK="${BOOT_READY_CHECK:-${APP_ROOT}/scripts/check-boot-ready.sh}"
 TEST_API_PORT="${TEST_API_PORT:-18000}"
 API_PROCESS_PATTERN="${API_PROCESS_PATTERN:-[a]pi/server.py.*--port ${TEST_API_PORT}}"
 
@@ -66,6 +67,20 @@ echo "HomeLab Sentinel post-boot verification"
 echo "App root : ${APP_ROOT}"
 echo "Database : ${DATABASE}"
 echo
+
+section "BOOT READINESS"
+
+if [[ ! -x "${BOOT_READY_CHECK}" ]]; then
+    echo "[FAIL] Boot readiness checker unavailable: ${BOOT_READY_CHECK}" >&2
+    exit 1
+fi
+
+if "${BOOT_READY_CHECK}"; then
+    pass "Current-boot platform readiness"
+else
+    echo "[FAIL] Post-boot verification refused before platform readiness" >&2
+    exit 1
+fi
 
 section "APPLICATION TREE"
 
@@ -131,7 +146,9 @@ if command -v timeout >/dev/null 2>&1; then
     fi
 
     HLS_OUTPUT=""
-    if HLS_OUTPUT="$(timeout "${HLS_COMMAND_TIMEOUT}" "${HLS_INSTALLED}" status 2>&1)"; then
+    if HLS_OUTPUT="$(
+        timeout "${HLS_COMMAND_TIMEOUT}"             "${HLS_INSTALLED}"             status             --ignore-verification-result             2>&1
+    )"; then
         if grep -Fq "HomeLab Sentinel Status" <<< "${HLS_OUTPUT}" &&
            grep -Fxq "  READY" <<< "${HLS_OUTPUT}"; then
             pass "hls status"
