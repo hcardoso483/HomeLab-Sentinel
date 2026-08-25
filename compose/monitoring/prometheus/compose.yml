@@ -10,6 +10,7 @@ services:
 
     volumes:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - /srv/homelab-sentinel/prometheus/targets:/etc/prometheus/hls-targets:ro
       - prometheus-data:/prometheus
 
     command:
@@ -26,6 +27,31 @@ services:
           "--spider",
           "-q",
           "http://localhost:9090/-/healthy"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  blackbox:
+    image: prom/blackbox-exporter:v0.28.0
+    container_name: homelab-sentinel-blackbox
+    restart: unless-stopped
+    cap_add:
+      - NET_RAW
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./config/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    command:
+      - "--config.file=/etc/blackbox_exporter/config.yml"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://localhost:9115/"
         ]
       interval: 30s
       timeout: 10s

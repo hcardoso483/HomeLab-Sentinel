@@ -11,3 +11,22 @@ scrape_configs:
     static_configs:
       - targets:
           - localhost:9090
+
+  - job_name: "hls-reachability"
+    metrics_path: /probe
+    params:
+      module:
+        - icmp_ipv4
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/hls-targets/*.json
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels:
+          - __address__
+        target_label: __param_target
+      - source_labels:
+          - __param_target
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
