@@ -5,6 +5,7 @@ from pathlib import Path
 APP_ROOT = Path("/opt/homelab-sentinel/app")
 DEFAULT_DATABASE = Path("/srv/homelab-sentinel/sentinel/inventory.db")
 INVENTORY = APP_ROOT / "core" / "inventory" / "inventory.py"
+RESOLVER = APP_ROOT / "core" / "resolver" / "resolver.sh"
 
 def error(message):
     print(f"[ERROR] {message}", file=sys.stderr)
@@ -79,6 +80,52 @@ def monitoring_targets(database):
         key=lambda item: item["entity_id"],
     )
 
+
+def monitoring_provider():
+    if not RESOLVER.is_file():
+        raise RuntimeError(f"Provider Resolver not found: {RESOLVER}")
+
+    result = subprocess.run(
+        [str(RESOLVER), "resolve", "monitoring"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(
+            detail or "Monitoring provider resolution failed"
+        )
+
+    fields = {
+        "capability": "monitoring",
+        "provider": None,
+        "source": None,
+        "status": None,
+    }
+
+    for line in result.stdout.splitlines():
+        if line.startswith("Capability: "):
+            fields["capability"] = line.split(":", 1)[1].strip()
+        elif line.startswith("Selected provider: "):
+            fields["provider"] = line.split(":", 1)[1].strip()
+        elif line.startswith("Source: "):
+            fields["source"] = line.split(":", 1)[1].strip()
+        elif line.startswith("Status: "):
+            fields["status"] = line.split(":", 1)[1].strip()
+
+    for key in ("provider", "source", "status"):
+        if not fields[key]:
+            raise RuntimeError(
+                "Provider Resolver returned incomplete Monitoring "
+                f"provider data: missing {key}"
+            )
+
+    return fields
+
+
 def emit_json(targets):
     try:
         for target in targets:
@@ -123,10 +170,33 @@ def emit_human(targets):
             f"{target['state']:<8}"
         )
 
+
+def emit_provider_json(provider):
+    print(
+        json.dumps(
+            provider,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
+
+
+def emit_provider_human(provider):
+    print("HomeLab Sentinel Monitoring Provider")
+    print()
+    print(f"{'Capability':<18} {provider['capability']}")
+    print(f"{'Provider':<18} {provider['provider']}")
+    print(f"{'Source':<18} {provider['source']}")
+    print(f"{'Status':<18} {provider['status']}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="HomeLab Sentinel Monitoring Core")
     parser.add_argument(
-        "command", nargs="?", default="targets", choices=("targets",),
+        "command",
+        nargs="?",
+        default="targets",
+        choices=("targets", "provider"),
         help="Monitoring query command (default: targets)",
     )
     parser.add_argument(
@@ -138,14 +208,24 @@ def main():
         help="Emit one canonical JSON target per line",
     )
     args = parser.parse_args()
-    if not args.database.is_file():
-        error(f"Inventory database not found: {args.database}")
-        return 1
     try:
+        if args.command == "provider":
+            provider = monitoring_provider()
+            if args.json:
+                emit_provider_json(provider)
+            else:
+                emit_provider_human(provider)
+            return 0
+
+        if not args.database.is_file():
+            error(f"Inventory database not found: {args.database}")
+            return 1
+
         targets = monitoring_targets(args.database)
     except RuntimeError as exc:
         error(str(exc))
         return 1
+
     emit_json(targets) if args.json else emit_human(targets)
     return 0
 
