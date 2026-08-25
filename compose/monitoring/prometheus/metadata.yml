@@ -31,6 +31,7 @@ healthcheck: scripts/healthcheck.sh
 
 entrypoints:
   monitoring-observer: scripts/observe.py
+  monitoring-target-renderer: scripts/render-targets.py
 
 install: scripts/install.sh
 
