@@ -16,6 +16,7 @@ Usage:
   hls status
   hls verify
   hls inventory [arguments...]
+  hls monitoring [arguments...]
   hls help
 
 Commands:
@@ -23,6 +24,7 @@ Commands:
   status      Show Core service and API status
   verify      Run the complete Sentinel verification suite
   inventory   Query the Living Inventory
+  monitoring  Query the Monitoring subsystem
   help        Show this help
 
 Install options:
@@ -278,6 +280,12 @@ command_inventory() {
     exec "${inventory}" "$@"
 }
 
+command_monitoring() {
+    local monitoring="${APP_ROOT}/core/monitoring/monitoring.py"
+    require_file "${monitoring}"
+    exec "${monitoring}" "$@"
+}
+
 main() {
     local command="${1:-help}"
     if (( $# > 0 )); then
@@ -289,6 +297,7 @@ main() {
         status) command_status "$@" ;;
         verify) command_verify "$@" ;;
         inventory) command_inventory "$@" ;;
+        monitoring) command_monitoring "$@" ;;
         help|-h|--help) usage ;;
         *)
             echo "[ERROR] Unknown command: ${command}" >&2
