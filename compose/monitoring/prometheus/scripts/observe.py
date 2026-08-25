@@ -157,7 +157,7 @@ def main():
         help="Monitoring target represented by the Prometheus result",
     )
 
-    source = parser.add_mutually_exclusive_group(required=True)
+    source = parser.add_mutually_exclusive_group(required=False)
 
     source.add_argument(
         "--fixture",
@@ -252,7 +252,11 @@ def main():
         args.target,
         checked_at,
         payload,
-        instance=args.instance,
+        instance=(
+            args.instance
+            if args.instance is not None
+            else (args.target if args.fixture is None else None)
+        ),
         job=args.job,
     )
 

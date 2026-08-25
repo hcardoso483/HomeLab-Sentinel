@@ -29,6 +29,9 @@ compose: compose.yml
 
 healthcheck: scripts/healthcheck.sh
 
+entrypoints:
+  monitoring-observer: scripts/observe.py
+
 install: scripts/install.sh
 
 update: scripts/update.sh

@@ -22,6 +22,7 @@ Usage:
   registry.sh get <module>
   registry.sh info <module>
   registry.sh providers <capability>
+  registry.sh entrypoint <module> <role>
   registry.sh validate
   registry.sh refresh
 EOF_USAGE
@@ -311,6 +312,66 @@ if requested_capability in capability_list:
 PY_PROVIDER_IDS
     done < <(find_modules)
 }
+
+module_entrypoint() {
+    local requested_id="$1"
+    local requested_role="$2"
+
+    local metadata_file
+    if ! metadata_file="$(find_module_metadata "${requested_id}")"; then
+        log_error "Module not found: ${requested_id}"
+        return 1
+    fi
+
+    local module_dir
+    module_dir="$(dirname "${metadata_file}")"
+
+    python3 - "${metadata_file}" "${module_dir}" "${requested_role}" <<'PY_ENTRYPOINT'
+import sys
+from pathlib import Path
+import yaml
+
+metadata_file = Path(sys.argv[1])
+module_dir = Path(sys.argv[2])
+requested_role = sys.argv[3]
+
+try:
+    metadata = yaml.safe_load(
+        metadata_file.read_text(encoding="utf-8")
+    ) or {}
+except (OSError, yaml.YAMLError) as exc:
+    print(f"[ERROR] Unable to read module metadata: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+entrypoints = metadata.get("entrypoints", {})
+if not isinstance(entrypoints, dict):
+    print("[ERROR] Module entrypoints must be a mapping.", file=sys.stderr)
+    sys.exit(1)
+
+relative = entrypoints.get(requested_role)
+if not isinstance(relative, str) or not relative:
+    print(
+        f"[ERROR] Module does not define entrypoint: {requested_role}",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+candidate = (module_dir / relative).resolve()
+module_root = module_dir.resolve()
+
+try:
+    candidate.relative_to(module_root)
+except ValueError:
+    print(
+        f"[ERROR] Entrypoint escapes module directory: {relative}",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+print(candidate)
+PY_ENTRYPOINT
+}
+
 
 provider_sources() {
     local requested_capability="$1"
@@ -781,6 +842,16 @@ case "${1:-}" in
         fi
 
         provider_ids "${2}"
+        ;;
+
+    entrypoint)
+        if [[ -z "${2:-}" || -z "${3:-}" ]]; then
+            log_error "Missing module ID or entrypoint role."
+            echo "[SUGGESTION] Usage:"
+            echo "  ${0} entrypoint <module> <role>"
+            exit 1
+        fi
+        module_entrypoint "${2}" "${3}"
         ;;
 
     provider-sources)
