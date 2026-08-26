@@ -130,6 +130,93 @@ def validate_record(record, line_number):
                 line_number,
             )
 
+    multi_pass_fields = {
+        "passes_observed",
+        "passes_total",
+        "observed_passes",
+    }
+
+    present_multi_pass_fields = (
+        multi_pass_fields & set(record)
+    )
+
+    if present_multi_pass_fields:
+        missing_multi_pass_fields = sorted(
+            multi_pass_fields - set(record)
+        )
+
+        if missing_multi_pass_fields:
+            return fail(
+                "Multi-Pass evidence requires field(s): "
+                + ", ".join(missing_multi_pass_fields),
+                line_number,
+            )
+
+        passes_total = record["passes_total"]
+        passes_observed = record["passes_observed"]
+        observed_passes = record["observed_passes"]
+
+        if (
+            isinstance(passes_total, bool)
+            or not isinstance(passes_total, int)
+            or passes_total < 1
+        ):
+            return fail(
+                "passes_total must be an integer >= 1.",
+                line_number,
+            )
+
+        if (
+            isinstance(passes_observed, bool)
+            or not isinstance(passes_observed, int)
+            or passes_observed < 1
+            or passes_observed > passes_total
+        ):
+            return fail(
+                "passes_observed must be an integer between "
+                "1 and passes_total.",
+                line_number,
+            )
+
+        if not isinstance(observed_passes, list):
+            return fail(
+                "observed_passes must be a list.",
+                line_number,
+            )
+
+        if any(
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            for value in observed_passes
+        ):
+            return fail(
+                "observed_passes entries must be integers.",
+                line_number,
+            )
+
+        if len(observed_passes) != len(set(observed_passes)):
+            return fail(
+                "observed_passes must contain unique values.",
+                line_number,
+            )
+
+        if any(
+            value < 1 or value > passes_total
+            for value in observed_passes
+        ):
+            return fail(
+                "observed_passes entries must be between "
+                "1 and passes_total.",
+                line_number,
+            )
+
+        if len(observed_passes) != passes_observed:
+            return fail(
+                "observed_passes length must equal "
+                "passes_observed.",
+                line_number,
+            )
+
     return True
 
 

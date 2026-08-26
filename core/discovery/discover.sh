@@ -18,12 +18,18 @@ SCOPE_CONFIG="${1:-${APP_ROOT}/config/sentinel/discovery-scopes.yml}"
 SCOPE_HELPER="${APP_ROOT}/core/discovery/scopes.py"
 RESOLVER="${APP_ROOT}/core/resolver/resolver.sh"
 RECORD_VALIDATOR="${APP_ROOT}/core/discovery/validate_record.py"
+MULTI_PASS="${APP_ROOT}/core/discovery/multi_pass.py"
+OBSERVATION_POLICY="${APP_ROOT}/core/discovery/observation_policy.py"
+DISCOVERY_CONFIG="${APP_ROOT}/config/sentinel/discovery.yml"
 
 for required_file in \
     "${SCOPE_CONFIG}" \
     "${SCOPE_HELPER}" \
     "${RESOLVER}" \
-    "${RECORD_VALIDATOR}"
+    "${RECORD_VALIDATOR}" \
+    "${MULTI_PASS}" \
+    "${OBSERVATION_POLICY}" \
+    "${DISCOVERY_CONFIG}"
 do
     [[ -f "${required_file}" ]] ||
         die "Required discovery component not found: ${required_file}"
@@ -42,6 +48,16 @@ PROVIDER_DISCOVER="${PROVIDER_DIR}/scripts/discover.sh"
 
 log_info "Discovery provider: ${PROVIDER}" >&2
 
+OBSERVATION_PASSES="$(
+    "${OBSERVATION_POLICY}" passes         --config "${DISCOVERY_CONFIG}"
+)" || die "Unable to load Discovery observation pass policy."
+
+OBSERVATION_INTERVAL="$(
+    "${OBSERVATION_POLICY}" interval         --config "${DISCOVERY_CONFIG}"
+)" || die "Unable to load Discovery observation interval policy."
+
+log_info     "Discovery observation policy: "     "${OBSERVATION_PASSES} pass(es), "     "${OBSERVATION_INTERVAL}s interval" >&2
+
 active_scopes="$("${SCOPE_HELPER}" active "${SCOPE_CONFIG}")" ||
     die "Unable to load active discovery scopes."
 
@@ -55,8 +71,9 @@ while IFS='|' read -r scope_id scope_type target scope_source; do
 
     log_info "Discovering scope: ${scope_id} (${target})" >&2
 
-    provider_output="$("${PROVIDER_DISCOVER}" "${target}")" ||
-        die "Discovery provider failed for scope: ${scope_id}"
+    provider_output="$(
+        "${MULTI_PASS}"             --provider "${PROVIDER_DISCOVER}"             --target "${target}"             --passes "${OBSERVATION_PASSES}"             --interval "${OBSERVATION_INTERVAL}"
+    )" || die "Discovery provider failed for scope: ${scope_id}"
 
     if [[ -z "${provider_output}" ]]; then
         log_info "Discovery completed with 0 observations: ${scope_id}" >&2

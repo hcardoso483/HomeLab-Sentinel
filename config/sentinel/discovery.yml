@@ -1,8 +1,16 @@
 # HomeLab Sentinel discovery configuration
 #
 # Discovery scheduling is mandatory.
-# The interval may be configured between 5 and 30 minutes.
+# The cycle interval may be configured between 5 and 30 minutes.
+#
+# Multi-Pass observation improves current-presence reliability by running
+# multiple provider passes inside one Discovery cycle.
 
 discovery:
+
   schedule:
     interval_minutes: 15
+
+  observation:
+    passes: 3
+    interval_seconds: 2
