@@ -294,3 +294,68 @@ pass "final database contract correct"
 echo
 echo "=== RESULT ==="
 echo "HomeLab Sentinel Discovery pipeline regression PASSED"
+
+echo
+echo "=== MULTI-PASS EVIDENCE PERSISTENCE ==="
+
+MULTI_PASS_OBSERVATION='{"schema_version":"1.0","provider":"test-multipass","discovery_method":"host-discovery","discovered_at":"2026-08-26T08:30:00Z","ip_addresses":["192.0.2.30"],"mac_address":"00:11:22:33:44:66","hostname":"multi-pass-storage-test","passes_observed":2,"passes_total":3,"observed_passes":[1,3]}'
+
+set +e
+CASE_OUTPUT="$(
+    printf '%s\n' "${MULTI_PASS_OBSERVATION}" |
+        "${STORE}" --database "${DATABASE}" 2>&1
+)"
+result=$?
+set -e
+
+echo "${CASE_OUTPUT}"
+
+[[ "${result}" -eq 0 ]] ||
+    fail "Multi-Pass observation store exit=${result}"
+
+python3 - "${DATABASE}" <<'PY'
+import json
+import sqlite3
+import sys
+
+database = sys.argv[1]
+
+connection = sqlite3.connect(database)
+
+try:
+    row = connection.execute("""
+        SELECT payload_json
+        FROM observations
+        WHERE provider = 'test-multipass'
+        ORDER BY received_at DESC
+        LIMIT 1
+    """).fetchone()
+finally:
+    connection.close()
+
+if row is None:
+    raise SystemExit(
+        "Multi-Pass observation was not stored"
+    )
+
+record = json.loads(row[0])
+
+expected = {
+    "passes_observed": 2,
+    "passes_total": 3,
+    "observed_passes": [1, 3],
+}
+
+for key, value in expected.items():
+    if record.get(key) != value:
+        raise SystemExit(
+            f"{key}: expected {value!r}, "
+            f"got {record.get(key)!r}"
+        )
+
+print("[PASS] Multi-Pass evidence survived payload storage")
+PY
+
+echo
+echo "=== MULTI-PASS STORAGE RESULT ==="
+echo "HomeLab Sentinel Multi-Pass storage persistence PASSED"

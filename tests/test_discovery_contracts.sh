@@ -276,3 +276,73 @@ require_contains \
 echo
 echo "=== RESULT ==="
 echo "HomeLab Sentinel Discovery contract regression PASSED"
+
+echo
+echo "=== MULTI-PASS RECORD CONTRACT ==="
+
+MULTI_PASS_VALID='{"schema_version":"1.0","provider":"test","discovery_method":"host-discovery","discovered_at":"2026-08-26T08:00:00Z","ip_addresses":["192.0.2.50"],"mac_address":"02:00:00:00:00:50","hostname":"multi-pass-test","passes_observed":2,"passes_total":3,"observed_passes":[1,3]}'
+
+if ! printf '%s\n' "${MULTI_PASS_VALID}" \
+    | "${VALIDATOR}" >/dev/null; then
+    fail "valid Multi-Pass observation rejected"
+fi
+
+pass "valid Multi-Pass observation accepted"
+
+LEGACY_VALID='{"schema_version":"1.0","provider":"test","discovery_method":"host-discovery","discovered_at":"2026-08-26T08:00:00Z","ip_addresses":["192.0.2.51"],"mac_address":null,"hostname":null}'
+
+if ! printf '%s\n' "${LEGACY_VALID}" \
+    | "${VALIDATOR}" >/dev/null; then
+    fail "legacy schema 1.0 observation rejected"
+fi
+
+pass "legacy schema 1.0 observation remains valid"
+
+PARTIAL_MULTI_PASS='{"schema_version":"1.0","provider":"test","discovery_method":"host-discovery","discovered_at":"2026-08-26T08:00:00Z","ip_addresses":["192.0.2.52"],"mac_address":null,"hostname":null,"passes_observed":2,"passes_total":3}'
+
+if printf '%s\n' "${PARTIAL_MULTI_PASS}" \
+    | "${VALIDATOR}" >/dev/null 2>&1; then
+    fail "partial Multi-Pass evidence accepted"
+fi
+
+pass "partial Multi-Pass evidence rejected"
+
+BAD_COUNT='{"schema_version":"1.0","provider":"test","discovery_method":"host-discovery","discovered_at":"2026-08-26T08:00:00Z","ip_addresses":["192.0.2.53"],"mac_address":null,"hostname":null,"passes_observed":4,"passes_total":3,"observed_passes":[1,2,3]}'
+
+if printf '%s\n' "${BAD_COUNT}" \
+    | "${VALIDATOR}" >/dev/null 2>&1; then
+    fail "passes_observed greater than passes_total accepted"
+fi
+
+pass "impossible Multi-Pass count rejected"
+
+BAD_DUPLICATE='{"schema_version":"1.0","provider":"test","discovery_method":"host-discovery","discovered_at":"2026-08-26T08:00:00Z","ip_addresses":["192.0.2.54"],"mac_address":null,"hostname":null,"passes_observed":2,"passes_total":3,"observed_passes":[1,1]}'
+
+if printf '%s\n' "${BAD_DUPLICATE}" \
+    | "${VALIDATOR}" >/dev/null 2>&1; then
+    fail "duplicate observed pass numbers accepted"
+fi
+
+pass "duplicate observed pass numbers rejected"
+
+BAD_RANGE='{"schema_version":"1.0","provider":"test","discovery_method":"host-discovery","discovered_at":"2026-08-26T08:00:00Z","ip_addresses":["192.0.2.55"],"mac_address":null,"hostname":null,"passes_observed":2,"passes_total":3,"observed_passes":[1,4]}'
+
+if printf '%s\n' "${BAD_RANGE}" \
+    | "${VALIDATOR}" >/dev/null 2>&1; then
+    fail "out-of-range observed pass accepted"
+fi
+
+pass "out-of-range observed pass rejected"
+
+BAD_LENGTH='{"schema_version":"1.0","provider":"test","discovery_method":"host-discovery","discovered_at":"2026-08-26T08:00:00Z","ip_addresses":["192.0.2.56"],"mac_address":null,"hostname":null,"passes_observed":2,"passes_total":3,"observed_passes":[1]}'
+
+if printf '%s\n' "${BAD_LENGTH}" \
+    | "${VALIDATOR}" >/dev/null 2>&1; then
+    fail "inconsistent Multi-Pass evidence length accepted"
+fi
+
+pass "Multi-Pass evidence count consistency enforced"
+
+echo
+echo "=== MULTI-PASS CONTRACT RESULT ==="
+echo "HomeLab Sentinel Multi-Pass record contract PASSED"
