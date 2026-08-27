@@ -11,6 +11,7 @@ SYSUSERS_TARGET="/etc/sysusers.d/homelab-sentinel.conf"
 
 API_UNIT="homelab-sentinel-api.service"
 VERIFY_UNIT="homelab-sentinel-verify.service"
+VERIFY_TIMER="homelab-sentinel-verify.timer"
 DISCOVERY_UNIT="homelab-sentinel-discovery.service"
 DISCOVERY_TIMER="homelab-sentinel-discovery.timer"
 
@@ -25,6 +26,8 @@ SERVICE_USER="homelab-sentinel"
 SERVICE_GROUP="homelab-sentinel"
 SENTINEL_STATE_DIR="/srv/homelab-sentinel/sentinel"
 INVENTORY_DATABASE="${SENTINEL_STATE_DIR}/inventory.db"
+IDENTITY_DATABASE="${SENTINEL_STATE_DIR}/identity.db"
+RUNTIME_STATE_DIR="${SENTINEL_STATE_DIR}/runtime"
 
 log_info() {
     echo "[INFO] $*"
@@ -92,6 +95,14 @@ reconcile_sentinel_state_ownership() {
     chown "${SERVICE_USER}:${SERVICE_GROUP}" \
         "${SENTINEL_STATE_DIR}" \
         "${INVENTORY_DATABASE}"
+
+    if [[ -d "${RUNTIME_STATE_DIR}" ]]; then
+        chown "${SERVICE_USER}:${SERVICE_GROUP}"             "${RUNTIME_STATE_DIR}"
+    fi
+
+    if [[ -f "${IDENTITY_DATABASE}" ]]; then
+        chown "${SERVICE_USER}:${SERVICE_GROUP}"             "${IDENTITY_DATABASE}"
+    fi
 
     log_pass "Sentinel state ownership ready: ${SERVICE_USER}:${SERVICE_GROUP}"
 }
@@ -175,6 +186,7 @@ require_file "${APP_ROOT}/api/server.py"
 require_file "${APP_ROOT}/scripts/verify-sentinel.sh"
 require_file "${SYSTEMD_SOURCE}/${API_UNIT}"
 require_file "${SYSTEMD_SOURCE}/${VERIFY_UNIT}"
+require_file "${SYSTEMD_SOURCE}/${VERIFY_TIMER}"
 require_file "${SYSTEMD_SOURCE}/${DISCOVERY_UNIT}"
 require_file "${SYSTEMD_SOURCE}/${DISCOVERY_TIMER}"
 
@@ -186,6 +198,7 @@ log_pass "HomeLab Sentinel CLI installed: ${HLS_TARGET}"
 
 install_unit "${API_UNIT}"
 install_unit "${VERIFY_UNIT}"
+install_unit "${VERIFY_TIMER}"
 install_unit "${DISCOVERY_UNIT}"
 install_unit "${DISCOVERY_TIMER}"
 
@@ -210,8 +223,9 @@ log_info "Running initial managed discovery..."
 
 systemctl start "${DISCOVERY_UNIT}"
 
-log_info "Enabling post-boot verification..."
-systemctl enable "${VERIFY_UNIT}"
+log_info "Enabling delayed post-boot verification..."
+systemctl disable "${VERIFY_UNIT}" >/dev/null 2>&1 || true
+systemctl enable --now "${VERIFY_TIMER}"
 
 log_info "Running HomeLab Sentinel verification..."
 "${APP_ROOT}/scripts/verify-sentinel.sh"

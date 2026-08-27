@@ -295,6 +295,21 @@ require_contains \
 echo
 echo "=== RESULT ==="
 run_case \
+    "VERIFICATION RUNNING WITH STALE FAILURE" \
+    0 \
+    --simulate verification-running
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Current verification IN PROGRESS" \
+    "running verification overrides stale failed result"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "  READY" \
+    "running verification does not degrade healthy platform"
+
+run_case \
     "FAILED VERIFICATION NORMAL STATUS" \
     1 \
     --simulate failed-verification

@@ -15,6 +15,7 @@ DISCOVERY_STATE = Path(
 )
 API_UNIT = "homelab-sentinel-api.service"
 VERIFY_UNIT = "homelab-sentinel-verify.service"
+VERIFY_TIMER = "homelab-sentinel-verify.timer"
 DISCOVERY_UNIT = "homelab-sentinel-discovery.service"
 DISCOVERY_RECONCILER = APP_ROOT / "core/discovery/reconcile.py"
 EXPECTED_USER = "homelab-sentinel"
@@ -27,6 +28,7 @@ SIMULATIONS = (
     "missing-database",
     "unsupported-schema",
     "failed-verification",
+    "verification-running",
     "discovery-failed",
     "discovery-recovering",
     "discovery-running",
@@ -476,16 +478,27 @@ def main():
     print()
     print("Verification")
 
-    enabled = run_command("systemctl", "is-enabled", VERIFY_UNIT)
+    enabled = run_command("systemctl", "is-enabled", VERIFY_TIMER)
     if enabled.returncode == 0 and enabled.stdout.strip() == "enabled":
-        status.ready("Post-boot unit", "ENABLED")
+        status.ready("Post-boot schedule", "ENABLED")
     else:
-        status.fail("Post-boot unit", "DISABLED")
+        status.fail("Post-boot schedule", "DISABLED")
 
+    verify_active = service_property(VERIFY_UNIT, "ActiveState")
+    verify_sub = service_property(VERIFY_UNIT, "SubState")
     verify_result = service_property(VERIFY_UNIT, "Result")
     verify_exit = service_property(VERIFY_UNIT, "ExecMainStatus")
 
     if simulation == "failed-verification":
+        verify_active = "failed"
+        verify_sub = "failed"
+        verify_result = "exit-code"
+        verify_exit = "1"
+    elif simulation == "verification-running":
+        # Deliberately preserve a stale failed result underneath the
+        # current running state. The current lifecycle must win.
+        verify_active = "activating"
+        verify_sub = "start"
         verify_result = "exit-code"
         verify_exit = "1"
 
@@ -494,6 +507,8 @@ def main():
             "Last result",
             "IGNORED (verification context)",
         )
+    elif verify_active in ("activating", "active"):
+        status.ready("Current verification", "IN PROGRESS")
     elif verify_result == "success" and verify_exit == "0":
         status.ready("Last result", "SUCCESS")
     elif verify_result is None or verify_exit is None:

@@ -1,0 +1,10 @@
+[Unit]
+Description=HomeLab Sentinel delayed post-boot verification
+
+[Timer]
+OnBootSec=10min
+AccuracySec=15s
+Unit=homelab-sentinel-verify.service
+
+[Install]
+WantedBy=timers.target

@@ -56,9 +56,11 @@ validate_acquired_tree() {
         installer/hls \
         installer/systemd/homelab-sentinel-api.service \
         installer/systemd/homelab-sentinel-verify.service \
+        installer/systemd/homelab-sentinel-verify.timer \
         installer/sysusers.d/homelab-sentinel.conf \
         api/server.py \
         scripts/verify-sentinel.sh \
+        scripts/verify-cli-command.sh \
         scripts/wait-core-api.sh; do
         if [[ ! -f "${app_root}/${required}" ]]; then
             echo "[ERROR] Acquired Sentinel tree is incomplete: ${required}" >&2

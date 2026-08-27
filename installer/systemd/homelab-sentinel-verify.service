@@ -11,6 +11,3 @@ Group=homelab-sentinel
 WorkingDirectory=/opt/homelab-sentinel/app
 ExecStart=/opt/homelab-sentinel/app/scripts/verify-sentinel.sh
 RemainAfterExit=no
-
-[Install]
-WantedBy=multi-user.target

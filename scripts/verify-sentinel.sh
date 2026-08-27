@@ -13,6 +13,9 @@ DISCOVERY_RECONCILE_TEST="${DISCOVERY_RECONCILE_TEST:-${APP_ROOT}/tests/test_dis
 HLS_SOURCE="${HLS_SOURCE:-${APP_ROOT}/installer/hls}"
 HLS_INSTALLED="${HLS_INSTALLED:-/usr/local/bin/hls}"
 HLS_COMMAND_TIMEOUT="${HLS_COMMAND_TIMEOUT:-10}"
+HLS_BOOT_ATTEMPTS="${HLS_BOOT_ATTEMPTS:-3}"
+HLS_BOOT_RETRY_INTERVAL="${HLS_BOOT_RETRY_INTERVAL:-5}"
+HLS_RETRY_HELPER="${HLS_RETRY_HELPER:-${APP_ROOT}/scripts/verify-cli-command.sh}"
 BOOT_READY_CHECK="${BOOT_READY_CHECK:-${APP_ROOT}/scripts/check-boot-ready.sh}"
 TEST_API_PORT="${TEST_API_PORT:-18000}"
 API_PROCESS_PATTERN="${API_PROCESS_PATTERN:-[a]pi/server.py.*--port ${TEST_API_PORT}}"
@@ -100,6 +103,7 @@ check_file "${DISCOVERY_CONTRACT_TEST}" "Discovery contract regression test pres
 check_file "${DISCOVERY_PIPELINE_TEST}" "Discovery pipeline regression test present"
 check_file "${DISCOVERY_RECONCILE_TEST}" "Discovery reconciliation regression test present"
 check_file "${APP_ROOT}/scripts/wait-core-api.sh" "Core API readiness helper present"
+check_file "${HLS_RETRY_HELPER}" "HLS boot retry helper present"
 
 check_executable "${APP_ROOT}/api/server.py" "Core API server executable"
 check_executable "${APP_ROOT}/core/inventory/inventory.py" "Living Inventory CLI executable"
@@ -110,6 +114,7 @@ check_executable "${DISCOVERY_CONTRACT_TEST}" "Discovery contract regression tes
 check_executable "${DISCOVERY_PIPELINE_TEST}" "Discovery pipeline regression test executable"
 check_executable "${DISCOVERY_RECONCILE_TEST}" "Discovery reconciliation regression test executable"
 check_executable "${APP_ROOT}/scripts/wait-core-api.sh" "Core API readiness helper executable"
+check_executable "${HLS_RETRY_HELPER}" "HLS boot retry helper executable"
 
 section "HLS CLI"
 
@@ -147,7 +152,7 @@ if command -v timeout >/dev/null 2>&1; then
 
     HLS_OUTPUT=""
     if HLS_OUTPUT="$(
-        timeout "${HLS_COMMAND_TIMEOUT}"             "${HLS_INSTALLED}"             status             --ignore-verification-result             2>&1
+        "${HLS_RETRY_HELPER}"             --timeout "${HLS_COMMAND_TIMEOUT}"             --attempts "${HLS_BOOT_ATTEMPTS}"             --interval "${HLS_BOOT_RETRY_INTERVAL}"             --             "${HLS_INSTALLED}"             status             --ignore-verification-result             2>&1
     )"; then
         if grep -Fq "HomeLab Sentinel Status" <<< "${HLS_OUTPUT}" &&
            grep -Fxq "  READY" <<< "${HLS_OUTPUT}"; then
@@ -162,7 +167,9 @@ if command -v timeout >/dev/null 2>&1; then
     fi
 
     HLS_OUTPUT=""
-    if HLS_OUTPUT="$(timeout "${HLS_COMMAND_TIMEOUT}" "${HLS_INSTALLED}" inventory list 2>&1)"; then
+    if HLS_OUTPUT="$(
+        "${HLS_RETRY_HELPER}"             --timeout "${HLS_COMMAND_TIMEOUT}"             --attempts "${HLS_BOOT_ATTEMPTS}"             --interval "${HLS_BOOT_RETRY_INTERVAL}"             --             "${HLS_INSTALLED}"             inventory list             2>&1
+    )"; then
         pass "hls inventory"
     else
         HLS_RESULT=$?
