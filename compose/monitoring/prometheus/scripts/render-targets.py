@@ -141,6 +141,7 @@ def atomic_write(path, payload):
             handle.flush()
             os.fsync(handle.fileno())
 
+        os.chmod(temporary, 0o644)
         os.replace(temporary, path)
 
     except Exception:

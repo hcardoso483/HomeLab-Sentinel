@@ -53,6 +53,13 @@ JSONL
 
 pass "provider runtime target file created"
 
+MODE="$(stat -c '%a' "${OUTPUT}")"
+
+[[ "${MODE}" == "644" ]] ||
+    fail "rendered target file mode is ${MODE}, expected 644"
+
+pass "provider runtime target file is provider-readable"
+
 python3 - "${OUTPUT}" <<'PY'
 import json
 import sys

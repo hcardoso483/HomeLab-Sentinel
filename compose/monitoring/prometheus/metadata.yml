@@ -32,6 +32,7 @@ healthcheck: scripts/healthcheck.sh
 entrypoints:
   monitoring-observer: scripts/observe.py
   monitoring-target-renderer: scripts/render-targets.py
+  monitoring-target-reconciler: scripts/reconcile-targets.sh
 
 install: scripts/install.sh
 
