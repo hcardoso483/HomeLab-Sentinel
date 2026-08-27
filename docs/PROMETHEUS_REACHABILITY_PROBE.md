@@ -82,12 +82,21 @@ Prometheus series.
 
 ## Slice Boundary
 
-This slice proves the provider probe engine and a direct live ICMP probe.
+This slice proves the live Prometheus reachability provider path:
+
+- canonical Monitoring targets are rendered from the live Living Inventory
+- generated file-based service discovery state is provider-readable
+- Prometheus loads the reconciled reachability target set
+- Sentinel `entity_id` identity survives provider relabeling
+- Blackbox Exporter performs live IPv4 ICMP probes
+- Prometheus exposes `probe_success` evidence for reconciled targets
+
+The live integration regression verifies this path without requiring every
+monitored entity to be reachable. Both `probe_success=1` and
+`probe_success=0` are valid provider evidence.
 
 It does not yet:
 
-- render the full live Living Inventory target set
-- reload/recreate the active Prometheus service
 - ingest `probe_success` as Sentinel observations
 - schedule reconciliation or collection
 - convert an ICMP failure directly into Sentinel `DOWN`
