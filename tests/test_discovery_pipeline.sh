@@ -10,6 +10,7 @@ CORRELATE="${APP_ROOT}/core/inventory/correlate.py"
 
 TMP_DIR="$(mktemp -d)"
 DATABASE="${TMP_DIR}/inventory.db"
+IDENTITY_DATABASE="${TMP_DIR}/identity.db"
 
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
@@ -121,7 +122,7 @@ require_contains \
 
 run_capture \
     "FIRST CORRELATION" \
-    "${CORRELATE}" --database "${DATABASE}"
+    "${CORRELATE}" --database "${DATABASE}" --identity-database "${IDENTITY_DATABASE}"
 
 require_contains \
     "Processed: 1, created: 1, resolved: 0, unresolved: 0" \
@@ -168,7 +169,7 @@ require_contains \
 
 run_capture \
     "SECOND CORRELATION" \
-    "${CORRELATE}" --database "${DATABASE}"
+    "${CORRELATE}" --database "${DATABASE}" --identity-database "${IDENTITY_DATABASE}"
 
 require_contains \
     "Processed: 1, created: 0, resolved: 1, unresolved: 0" \
@@ -207,7 +208,7 @@ echo "${CASE_OUTPUT}"
 
 run_capture \
     "NO-MAC CORRELATION" \
-    "${CORRELATE}" --database "${DATABASE}"
+    "${CORRELATE}" --database "${DATABASE}" --identity-database "${IDENTITY_DATABASE}"
 
 require_contains \
     "Processed: 1, created: 0, resolved: 0, unresolved: 1" \
@@ -249,7 +250,7 @@ pass "duplicate ingestion is idempotent"
 
 run_capture \
     "FINAL CORRELATION IDEMPOTENCE" \
-    "${CORRELATE}" --database "${DATABASE}"
+    "${CORRELATE}" --database "${DATABASE}" --identity-database "${IDENTITY_DATABASE}"
 
 require_contains \
     "Processed: 0, created: 0, resolved: 0, unresolved: 0" \

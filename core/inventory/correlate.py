@@ -2,13 +2,29 @@
 
 import argparse
 import json
+import os
 import sqlite3
 import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+APP_ROOT = Path(__file__).resolve().parents[2]
+
+if str(APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(APP_ROOT))
+
+from core.identity.identity import lookup as lookup_identity
+from core.identity.identity import open_db as open_identity_db
+from core.identity.identity import register as register_identity
+
 DEFAULT_DATABASE = Path("/srv/homelab-sentinel/sentinel/inventory.db")
+DEFAULT_IDENTITY_DATABASE = Path(
+    os.environ.get(
+        "IDENTITY_DATABASE",
+        "/srv/homelab-sentinel/sentinel/identity.db",
+    )
+)
 
 GLOBAL_MAC_CONFIDENCE = 0.90
 LOCAL_MAC_CONFIDENCE = 0.60
@@ -88,8 +104,10 @@ def mac_is_locally_administered(mac_address):
     return bool(first_octet & 0x02)
 
 
-def create_entity(connection):
-    entity_id = f"dev-{uuid.uuid4().hex}"
+def create_entity(connection, entity_id=None):
+    if entity_id is None:
+        entity_id = f"dev-{uuid.uuid4().hex}"
+
     now = utc_now()
 
     connection.execute("""
@@ -152,7 +170,11 @@ def mark_unresolved(connection, observation_id, reason):
     """, (reason, utc_now(), observation_id))
 
 
-def correlate_observation(connection, observation_id, payload_json):
+def correlate_observation(
+        connection,
+        identity_connection,
+        observation_id,
+        payload_json):
     record = json.loads(payload_json)
 
     mac_address = record.get("mac_address")
@@ -174,7 +196,37 @@ def correlate_observation(connection, observation_id, payload_json):
             confidence = GLOBAL_MAC_CONFIDENCE
 
         if len(matches) == 0:
+            if not local_mac:
+                persistent_identity = lookup_identity(
+                    identity_connection,
+                    mac_address,
+                )
+
+                if persistent_identity is not None:
+                    entity_id = create_entity(
+                        connection,
+                        persistent_identity["entity_id"],
+                    )
+
+                    resolve_observation(
+                        connection,
+                        observation_id,
+                        entity_id,
+                        "persistent-identity-mac-match",
+                        persistent_identity["confidence"],
+                    )
+
+                    register_identity(
+                        identity_connection,
+                        entity_id,
+                        mac_address,
+                        record.get("discovered_at") or utc_now(),
+                    )
+
+                    return "resolved", entity_id
+
             entity_id = create_entity(connection)
+
             resolve_observation(
                 connection,
                 observation_id,
@@ -182,6 +234,15 @@ def correlate_observation(connection, observation_id, payload_json):
                 new_method,
                 confidence,
             )
+
+            if not local_mac:
+                register_identity(
+                    identity_connection,
+                    entity_id,
+                    mac_address,
+                    record.get("discovered_at") or utc_now(),
+                )
+
             return "new", entity_id
 
         if len(matches) == 1:
@@ -240,7 +301,7 @@ def correlate_observation(connection, observation_id, payload_json):
     return "unresolved", None
 
 
-def run_correlation(connection):
+def run_correlation(connection, identity_connection):
     pending = pending_observations(connection)
 
     created = resolved = unresolved = 0
@@ -248,6 +309,7 @@ def run_correlation(connection):
     for observation_id, payload_json in pending:
         result, entity_id = correlate_observation(
             connection,
+            identity_connection,
             observation_id,
             payload_json,
         )
@@ -279,6 +341,16 @@ def main():
         help=f"SQLite database path (default: {DEFAULT_DATABASE})",
     )
 
+    parser.add_argument(
+        "--identity-database",
+        type=Path,
+        default=DEFAULT_IDENTITY_DATABASE,
+        help=(
+            "Persistent Identity SQLite database path "
+            f"(default: {DEFAULT_IDENTITY_DATABASE})"
+        ),
+    )
+
     args = parser.parse_args()
 
     if not args.database.is_file():
@@ -301,7 +373,18 @@ def main():
                     "does not support correlation"
                 )
 
-            total, created, resolved, unresolved = run_correlation(connection)
+            identity_connection = open_identity_db(
+                args.identity_database,
+                create=True,
+            )
+
+            try:
+                total, created, resolved, unresolved = run_correlation(
+                    connection,
+                    identity_connection,
+                )
+            finally:
+                identity_connection.close()
 
         finally:
             connection.close()

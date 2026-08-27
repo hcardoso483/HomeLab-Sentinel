@@ -10,6 +10,7 @@ CORRELATE="${APP_ROOT}/core/inventory/correlate.py"
 
 TMP_DIR="$(mktemp -d /tmp/hls-correlation-test.XXXXXX)"
 DATABASE="${TMP_DIR}/inventory.db"
+IDENTITY_DATABASE="${TMP_DIR}/identity.db"
 
 cleanup() {
     rm -rf "${TMP_DIR}"
@@ -80,7 +81,7 @@ for record in records:
 PY
 
 "${STORE}" --database "${DATABASE}"
-"${CORRELATE}" --database "${DATABASE}"
+"${CORRELATE}" --database "${DATABASE}" --identity-database "${IDENTITY_DATABASE}"
 
 python3 - "${DATABASE}" <<'PY'
 import sqlite3
@@ -231,7 +232,7 @@ for record in records:
 PY
 
 "${STORE}" --database "${DATABASE}"
-"${CORRELATE}" --database "${DATABASE}"
+"${CORRELATE}" --database "${DATABASE}" --identity-database "${IDENTITY_DATABASE}"
 
 python3 - "${DATABASE}" "${LOCAL_ENTITY}" "${GLOBAL_ENTITY}" <<'PY'
 import sqlite3
@@ -323,7 +324,7 @@ for record in records:
 PY
 
 "${STORE}" --database "${DATABASE}"
-"${CORRELATE}" --database "${DATABASE}"
+"${CORRELATE}" --database "${DATABASE}" --identity-database "${IDENTITY_DATABASE}"
 
 python3 - "${DATABASE}" "${GLOBAL_ENTITY}" <<'PY'
 import sqlite3
@@ -408,7 +409,7 @@ print(json.dumps(record, separators=(",", ":"), sort_keys=True))
 PY
 
 "${STORE}" --database "${DATABASE}"
-"${CORRELATE}" --database "${DATABASE}"
+"${CORRELATE}" --database "${DATABASE}" --identity-database "${IDENTITY_DATABASE}"
 
 AMBIGUITY_ENTITY_COUNT="$(
 python3 - "${DATABASE}" <<'PY'
@@ -464,7 +465,7 @@ print(json.dumps(record, separators=(",", ":"), sort_keys=True))
 PY
 
 "${STORE}" --database "${DATABASE}"
-"${CORRELATE}" --database "${DATABASE}"
+"${CORRELATE}" --database "${DATABASE}" --identity-database "${IDENTITY_DATABASE}"
 
 python3 - "${DATABASE}" <<'PY'
 import sqlite3
