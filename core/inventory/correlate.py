@@ -254,6 +254,15 @@ def correlate_observation(
                 match_method,
                 confidence,
             )
+
+            if not local_mac:
+                register_identity(
+                    identity_connection,
+                    entity_id,
+                    mac_address,
+                    record.get("discovered_at") or utc_now(),
+                )
+
             return "resolved", entity_id
 
         mark_unresolved(

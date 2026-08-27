@@ -218,5 +218,72 @@ echo "Current Inventory entity   : ${LOCAL_CURRENT_ENTITY}"
 pass "local MAC did not resurrect Persistent Identity"
 
 echo
+echo "=== EXISTING INVENTORY ENTITY CONFIRMS IDENTITY ==="
+
+INVENTORY_EXISTING="${TMP_DIR}/inventory-existing.db"
+IDENTITY_EXISTING="${TMP_DIR}/identity-existing.db"
+
+"${IDENTITY}" \
+    --database "${IDENTITY_EXISTING}" \
+    init >/dev/null
+
+EXISTING_ONE='{"schema_version":"1.0","provider":"identity-correlation-test","discovery_method":"host-discovery","discovered_at":"2026-08-27T07:20:00Z","ip_addresses":["192.0.2.130"],"mac_address":"00:AA:BB:CC:DD:10","hostname":"existing-one"}'
+
+EXISTING_TWO='{"schema_version":"1.0","provider":"identity-correlation-test","discovery_method":"host-discovery","discovered_at":"2026-08-27T07:25:00Z","ip_addresses":["192.0.2.131"],"mac_address":"00:AA:BB:CC:DD:10","hostname":"existing-two"}'
+
+printf '%s\n' "${EXISTING_ONE}" |
+    "${STORE}" --database "${INVENTORY_EXISTING}" >/dev/null
+
+"${CORRELATE}" \
+    --database "${INVENTORY_EXISTING}" \
+    --identity-database "${IDENTITY_EXISTING}" \
+    >/dev/null
+
+EXISTING_ENTITY="$(
+    "${IDENTITY}" \
+        --database "${IDENTITY_EXISTING}" \
+        lookup \
+        --mac "00:AA:BB:CC:DD:10"
+)"
+
+[[ -n "${EXISTING_ENTITY}" ]] ||
+    fail "initial global identity registration missing"
+
+# Remove only Persistent Identity, while keeping the established current
+# Inventory entity and its observation history.
+rm -f "${IDENTITY_EXISTING}"
+
+"${IDENTITY}" \
+    --database "${IDENTITY_EXISTING}" \
+    init >/dev/null
+
+printf '%s\n' "${EXISTING_TWO}" |
+    "${STORE}" --database "${INVENTORY_EXISTING}" >/dev/null
+
+"${CORRELATE}" \
+    --database "${INVENTORY_EXISTING}" \
+    --identity-database "${IDENTITY_EXISTING}" \
+    >/dev/null
+
+set +e
+CONFIRMED_ENTITY="$(
+    "${IDENTITY}" \
+        --database "${IDENTITY_EXISTING}" \
+        lookup \
+        --mac "00:AA:BB:CC:DD:10" \
+        2>/dev/null
+)"
+CONFIRM_RC=$?
+set -e
+
+[[ "${CONFIRM_RC}" -eq 0 ]] ||
+    fail "existing Inventory entity did not confirm Persistent Identity"
+
+[[ "${CONFIRMED_ENTITY}" == "${EXISTING_ENTITY}" ]] ||
+    fail "existing Inventory confirmation changed canonical entity"
+
+pass "existing global-MAC entity confirmed into Persistent Identity"
+
+echo
 echo "=== RESULT ==="
 echo "HomeLab Sentinel Persistent Identity correlation regression PASSED"
