@@ -16,6 +16,17 @@ DEFAULT_PROMETHEUS_URL = "http://127.0.0.1:9090"
 DEFAULT_TIMEOUT = 5.0
 
 
+def reachability_query(entity_id):
+    return (
+        'probe_success{'
+        'hls_check_type="reachability",'
+        'hls_provider="prometheus",'
+        f'hls_entity_id="{entity_id}",'
+        'job="hls-reachability"'
+        '}'
+    )
+
+
 def error(message):
     print(f"[ERROR] {message}", file=sys.stderr)
 
@@ -94,6 +105,34 @@ def select_result(payload, instance=None, job=None):
         return None
 
     return matches[0]
+
+
+def sample_checked_at(payload, instance=None, job=None):
+    sample = select_result(
+        payload,
+        instance=instance,
+        job=job,
+    )
+
+    if sample is None:
+        return None
+
+    value = sample.get("value")
+
+    if not isinstance(value, list) or len(value) < 2:
+        return None
+
+    try:
+        timestamp = float(value[0])
+    except (TypeError, ValueError):
+        return None
+
+    return (
+        datetime
+        .fromtimestamp(timestamp, timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def prometheus_status(payload, instance=None, job=None):
@@ -179,8 +218,12 @@ def main():
 
     parser.add_argument(
         "--query",
-        default="up",
-        help="Prometheus instant query used in live mode (default: up)",
+        default=None,
+        help=(
+            "Prometheus instant query used in live mode; "
+            "defaults to the provider-owned reachability query "
+            "for the requested Sentinel entity"
+        ),
     )
 
     parser.add_argument(
@@ -222,41 +265,62 @@ def main():
         error("timeout must be greater than zero")
         return 2
 
-    checked_at = args.checked_at or utc_now()
+    checked_at = args.checked_at
 
-    if not checked_at.endswith("Z"):
-        error("checked_at must be a UTC timestamp ending in Z")
-        return 2
+    if checked_at is not None:
+        if not checked_at.endswith("Z"):
+            error("checked_at must be a UTC timestamp ending in Z")
+            return 2
 
-    try:
-        datetime.fromisoformat(checked_at[:-1] + "+00:00")
-    except ValueError:
-        error("checked_at must be a valid UTC timestamp")
-        return 2
+        try:
+            datetime.fromisoformat(
+                checked_at[:-1] + "+00:00"
+            )
+        except ValueError:
+            error("checked_at must be a valid UTC timestamp")
+            return 2
 
     try:
         if args.fixture is not None:
             payload = load_fixture(args.fixture)
         else:
+            query = (
+                args.query
+                if args.query is not None
+                else reachability_query(args.entity_id)
+            )
+
             payload = load_live(
                 args.prometheus_url,
-                args.query,
+                query,
                 args.timeout,
             )
     except ValueError as exc:
         error(str(exc))
         return 1
 
+    instance = (
+        args.instance
+        if args.instance is not None
+        else (args.target if args.fixture is None else None)
+    )
+
+    if checked_at is None:
+        checked_at = (
+            sample_checked_at(
+                payload,
+                instance=instance,
+                job=args.job,
+            )
+            or utc_now()
+        )
+
     observation = canonical_observation(
         args.entity_id,
         args.target,
         checked_at,
         payload,
-        instance=(
-            args.instance
-            if args.instance is not None
-            else (args.target if args.fixture is None else None)
-        ),
+        instance=instance,
         job=args.job,
     )
 

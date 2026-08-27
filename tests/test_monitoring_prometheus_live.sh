@@ -124,6 +124,7 @@ pass "deterministic Prometheus HTTP fixture server started"
     --entity-id "dev-live-fixture" \
     --target "localhost:9090" \
     --live \
+    --query up \
     --prometheus-url "${BASE_URL}" \
     --instance "localhost:9090" \
     --job "prometheus" \
@@ -157,6 +158,7 @@ pass "live HTTP query -> canonical success observation"
     --entity-id "dev-live-fixture" \
     --target "192.0.2.20:9100" \
     --live \
+    --query up \
     --prometheus-url "${BASE_URL}" \
     --instance "192.0.2.20:9100" \
     --job "sentinel" \
@@ -179,6 +181,7 @@ pass "live HTTP query selects requested instance/job"
     --entity-id "dev-live-fixture" \
     --target "192.0.2.99:9100" \
     --live \
+    --query up \
     --prometheus-url "${BASE_URL}" \
     --instance "192.0.2.99:9100" \
     --job "sentinel" \
@@ -201,6 +204,7 @@ pass "missing requested live result -> canonical unknown observation"
     --entity-id "dev-live-fixture" \
     --target "ambiguous" \
     --live \
+    --query up \
     --prometheus-url "${BASE_URL}" \
     --checked-at "2026-08-25T10:15:00Z" \
     >"${TMP_ROOT}/ambiguous.out"
