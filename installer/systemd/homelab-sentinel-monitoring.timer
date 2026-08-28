@@ -1,0 +1,11 @@
+[Unit]
+Description=HomeLab Sentinel Monitoring Collection Scheduler
+
+[Timer]
+OnActiveSec=90s
+OnUnitActiveSec=120s
+AccuracySec=5s
+Unit=homelab-sentinel-monitoring.service
+
+[Install]
+WantedBy=timers.target

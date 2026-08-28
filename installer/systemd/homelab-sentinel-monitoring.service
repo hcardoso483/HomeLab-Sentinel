@@ -1,9 +1,9 @@
 [Unit]
-Description=HomeLab Sentinel Discovery Runtime
+Description=HomeLab Sentinel Monitoring Collection
 After=local-fs.target network-online.target
 Wants=network-online.target
 ConditionPathExists=/opt/homelab-sentinel/app/scripts/with-inventory-lock.sh
-ConditionPathExists=/opt/homelab-sentinel/app/core/discovery/runtime.sh
+ConditionPathExists=/opt/homelab-sentinel/app/core/monitoring/orchestrate.py
 ConditionPathExists=/srv/homelab-sentinel/sentinel/inventory.db
 
 [Service]
@@ -12,7 +12,4 @@ User=homelab-sentinel
 Group=homelab-sentinel
 WorkingDirectory=/opt/homelab-sentinel/app
 
-AmbientCapabilities=CAP_NET_RAW
-CapabilityBoundingSet=CAP_NET_RAW
-
-ExecStart=/opt/homelab-sentinel/app/scripts/with-inventory-lock.sh /opt/homelab-sentinel/app/core/discovery/runtime.sh run
+ExecStart=/opt/homelab-sentinel/app/scripts/with-inventory-lock.sh /opt/homelab-sentinel/app/core/monitoring/orchestrate.py --database /srv/homelab-sentinel/sentinel/inventory.db --json

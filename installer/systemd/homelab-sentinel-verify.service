@@ -2,6 +2,7 @@
 Description=HomeLab Sentinel post-boot verification
 After=local-fs.target homelab-sentinel-api.service
 Requires=homelab-sentinel-api.service
+ConditionPathExists=/opt/homelab-sentinel/app/scripts/with-inventory-lock.sh
 ConditionPathExists=/opt/homelab-sentinel/app/scripts/verify-sentinel.sh
 
 [Service]
@@ -9,5 +10,7 @@ Type=oneshot
 User=homelab-sentinel
 Group=homelab-sentinel
 WorkingDirectory=/opt/homelab-sentinel/app
-ExecStart=/opt/homelab-sentinel/app/scripts/verify-sentinel.sh
+
+ExecStart=/opt/homelab-sentinel/app/scripts/with-inventory-lock.sh /opt/homelab-sentinel/app/scripts/verify-sentinel.sh
+
 RemainAfterExit=no

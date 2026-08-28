@@ -1,0 +1,14 @@
+[Unit]
+Description=HomeLab Sentinel Monitoring Target Reconciliation
+After=local-fs.target network-online.target
+Wants=network-online.target
+ConditionPathExists=/opt/homelab-sentinel/app/registry/registry.sh
+ConditionPathExists=/srv/homelab-sentinel/sentinel/inventory.db
+
+[Service]
+Type=oneshot
+User=homelab-sentinel
+Group=homelab-sentinel
+WorkingDirectory=/opt/homelab-sentinel/app
+
+ExecStart=/opt/homelab-sentinel/app/core/monitoring/reconcile.sh

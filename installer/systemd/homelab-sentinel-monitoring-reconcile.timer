@@ -1,0 +1,11 @@
+[Unit]
+Description=HomeLab Sentinel Monitoring Target Reconciliation Scheduler
+
+[Timer]
+OnActiveSec=45s
+OnUnitActiveSec=60s
+AccuracySec=5s
+Unit=homelab-sentinel-monitoring-reconcile.service
+
+[Install]
+WantedBy=timers.target
