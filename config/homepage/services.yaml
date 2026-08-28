@@ -1,18 +1,63 @@
 ---
-# For configuration options and examples, please see:
-# https://gethomepage.dev/configs/services/
+- HomeLab Sentinel:
+    - Platform:
+        description: Canonical Sentinel platform status
+        widget:
+          type: customapi
+          url: http://172.18.0.1:18080/api/v1/status
+          refreshInterval: 10000
+          mappings:
+            - field: overall
+              label: Overall
+              format: text
+            - field: core_api.health
+              label: Core API
+              format: text
+            - field: inventory.database
+              label: Inventory
+              format: text
+            - field: verification.last_result
+              label: Verification
+              format: text
 
-- My First Group:
-    - My First Service:
-        href: http://localhost/
-        description: Homepage is awesome
+- Discovery:
+    - Discovery Engine:
+        description: Sentinel discovery state
+        widget:
+          type: customapi
+          url: http://172.18.0.1:18080/api/v1/status
+          refreshInterval: 10000
+          mappings:
+            - field: discovery.runtime
+              label: Runtime
+              format: text
+            - field: discovery.last_run
+              label: Last Run
+              format: text
+            - field: discovery.freshness
+              label: Freshness
+              format: text
+            - field: discovery.provider
+              label: Provider
+              format: text
 
-- My Second Group:
-    - My Second Service:
-        href: http://localhost/
-        description: Homepage is the best
-
-- My Third Group:
-    - My Third Service:
-        href: http://localhost/
-        description: Homepage is 😎
+- Monitoring:
+    - Monitoring Engine:
+        description: Canonical Sentinel monitoring state
+        widget:
+          type: customapi
+          url: http://172.18.0.1:18080/api/v1/status
+          refreshInterval: 10000
+          mappings:
+            - field: monitoring.collection
+              label: Collection
+              format: text
+            - field: monitoring.targets
+              label: Targets
+              format: number
+            - field: monitoring.entities.healthy
+              label: Healthy
+              format: number
+            - field: monitoring.entities.down
+              label: Down
+              format: number
