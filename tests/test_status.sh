@@ -340,6 +340,138 @@ require_contains \
     "  READY" \
     "verification context evaluates current platform"
 
+
+echo
+echo "=== MONITORING STATUS CONTRACT ==="
+
+run_case \
+    "HEALTHY MONITORING STATUS" \
+    0 \
+    --ignore-verification-result
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Monitoring" \
+    "healthy Monitoring section"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Scheduler            ACTIVE" \
+    "healthy Monitoring scheduler"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Schedule             ENABLED" \
+    "healthy Monitoring schedule"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Reconciliation       HEALTHY" \
+    "healthy Monitoring reconciliation"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Provider             prometheus" \
+    "healthy Monitoring provider"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Collection           HEALTHY" \
+    "healthy Monitoring collection"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Evidence             FRESH" \
+    "healthy Monitoring evidence freshness"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Targets              " \
+    "Monitoring target count"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Healthy              " \
+    "Monitoring healthy entity count"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Degraded             " \
+    "Monitoring degraded entity count"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Down                 " \
+    "Monitoring down entity count"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Unknown              " \
+    "Monitoring unknown entity count"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "  READY" \
+    "healthy Monitoring keeps Overall ready"
+
+run_case \
+    "MONITORING COLLECTION FAILED" \
+    1 \
+    --simulate monitoring-collection-failed \
+    --ignore-verification-result
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Collection           FAILED" \
+    "Monitoring collection failure detected"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "  DEGRADED" \
+    "Monitoring collection failure degrades Overall"
+
+run_case \
+    "MONITORING EVIDENCE STALE" \
+    1 \
+    --simulate monitoring-evidence-stale \
+    --ignore-verification-result
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Evidence             STALE" \
+    "stale Monitoring evidence detected"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "  DEGRADED" \
+    "stale Monitoring evidence degrades Overall"
+
+run_case \
+    "MONITORED ENTITIES DOWN" \
+    0 \
+    --simulate monitoring-entities-down \
+    --ignore-verification-result
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Collection           HEALTHY" \
+    "entity failures do not imply Monitoring collection failure"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Evidence             FRESH" \
+    "entity failures retain fresh Monitoring evidence"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "Down                 2" \
+    "down monitored entities are reported"
+
+require_contains \
+    "${CASE_OUTPUT}" \
+    "  READY" \
+    "down monitored entities do not degrade Sentinel itself"
+
 echo
 echo "=== RESULT ==="
 echo "HomeLab Sentinel Status regression PASSED"

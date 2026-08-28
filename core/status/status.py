@@ -6,6 +6,7 @@ import sqlite3
 import subprocess
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 APP_ROOT = Path("/opt/homelab-sentinel/app")
@@ -18,6 +19,14 @@ VERIFY_UNIT = "homelab-sentinel-verify.service"
 VERIFY_TIMER = "homelab-sentinel-verify.timer"
 DISCOVERY_UNIT = "homelab-sentinel-discovery.service"
 DISCOVERY_RECONCILER = APP_ROOT / "core/discovery/reconcile.py"
+
+MONITORING_CORE = APP_ROOT / "core/monitoring/monitoring.py"
+MONITORING_EVALUATOR = APP_ROOT / "core/monitoring/evaluate.py"
+MONITORING_UNIT = "homelab-sentinel-monitoring.service"
+MONITORING_TIMER = "homelab-sentinel-monitoring.timer"
+MONITORING_RECONCILE_UNIT = "homelab-sentinel-monitoring-reconcile.service"
+MONITORING_RECONCILE_TIMER = "homelab-sentinel-monitoring-reconcile.timer"
+MONITORING_FRESHNESS_SECONDS = 300
 EXPECTED_USER = "homelab-sentinel"
 EXPECTED_GROUP = "homelab-sentinel"
 API_HEALTH_URL = "http://127.0.0.1:8000/api/v1/health"
@@ -35,6 +44,9 @@ SIMULATIONS = (
     "discovery-scheduler-disabled",
     "discovery-schedule-drift",
     "discovery-state-unreadable",
+    "monitoring-collection-failed",
+    "monitoring-evidence-stale",
+    "monitoring-entities-down",
 )
 
 
@@ -149,6 +161,140 @@ def discovery_runtime_status():
     }
 
 
+def monitoring_provider_status():
+    if not MONITORING_CORE.is_file():
+        return None
+
+    result = run_command(
+        str(MONITORING_CORE),
+        "provider",
+        "--json",
+    )
+
+    if result.returncode != 0:
+        return None
+
+    try:
+        payload = json.loads(result.stdout)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    provider = payload.get("provider")
+
+    if payload.get("status") != "valid":
+        return None
+
+    if not isinstance(provider, str) or not provider:
+        return None
+
+    return provider
+
+
+def parse_utc_timestamp(value):
+    if not isinstance(value, str) or not value.endswith("Z"):
+        return None
+
+    try:
+        return datetime.fromisoformat(
+            value[:-1] + "+00:00"
+        )
+    except ValueError:
+        return None
+
+
+def monitoring_health_status():
+    if not MONITORING_EVALUATOR.is_file():
+        return None
+
+    result = run_command(
+        str(MONITORING_EVALUATOR),
+        "--database",
+        str(DATABASE),
+        "--json",
+    )
+
+    if result.returncode != 0:
+        return None
+
+    counts = {
+        "HEALTHY": 0,
+        "DEGRADED": 0,
+        "DOWN": 0,
+        "UNKNOWN": 0,
+    }
+
+    latest_time = None
+
+    try:
+        for line in result.stdout.splitlines():
+            if not line.strip():
+                continue
+
+            record = json.loads(line)
+
+            if not isinstance(record, dict):
+                return None
+
+            state = record.get("state")
+
+            if state not in counts:
+                return None
+
+            counts[state] += 1
+
+            checked_at = record.get("latest_checked_at")
+
+            if checked_at is not None:
+                parsed = parse_utc_timestamp(checked_at)
+
+                if parsed is None:
+                    return None
+
+                if latest_time is None or parsed > latest_time:
+                    latest_time = parsed
+
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+    freshness = "UNKNOWN"
+
+    if latest_time is not None:
+        age_seconds = (
+            datetime.now(timezone.utc) - latest_time
+        ).total_seconds()
+
+        if age_seconds <= MONITORING_FRESHNESS_SECONDS:
+            freshness = "FRESH"
+        else:
+            freshness = "STALE"
+
+    return {
+        "counts": counts,
+        "targets": sum(counts.values()),
+        "freshness": freshness,
+    }
+
+
+def oneshot_health(unit):
+    active = service_property(unit, "ActiveState")
+    result = service_property(unit, "Result")
+    exit_status = service_property(unit, "ExecMainStatus")
+
+    if active in ("activating", "active"):
+        return "IN PROGRESS"
+
+    if result == "success" and exit_status == "0":
+        return "HEALTHY"
+
+    if result is None or exit_status is None:
+        return "UNKNOWN"
+
+    return "FAILED"
+
+
 def inventory_status():
     if not DATABASE.is_file():
         return None, None
@@ -235,6 +381,20 @@ def main():
         status.ready("Database", "N/A")
         status.ready("Schema", "N/A")
         status.ready("Integrity", "N/A")
+
+        print()
+        print("Monitoring")
+        status.ready("Scheduler", "N/A")
+        status.ready("Schedule", "N/A")
+        status.ready("Reconciliation", "N/A")
+        status.ready("Provider", "N/A")
+        status.ready("Collection", "N/A")
+        status.ready("Evidence", "N/A")
+        status.ready("Targets", "N/A")
+        status.ready("Healthy", "N/A")
+        status.ready("Degraded", "N/A")
+        status.ready("Down", "N/A")
+        status.ready("Unknown", "N/A")
 
         print()
         print("Verification")
@@ -476,6 +636,121 @@ def main():
             status.fail("Integrity", str(integrity))
 
     print()
+    print("Monitoring")
+
+    monitoring_timer_active = (
+        service_property(
+            MONITORING_TIMER,
+            "ActiveState",
+        ) == "active"
+    )
+    monitoring_timer_enabled = (
+        service_property(
+            MONITORING_TIMER,
+            "UnitFileState",
+        ) == "enabled"
+    )
+
+    if monitoring_timer_active:
+        status.ready("Scheduler", "ACTIVE")
+    else:
+        status.fail("Scheduler", "INACTIVE")
+
+    if monitoring_timer_enabled:
+        status.ready("Schedule", "ENABLED")
+    else:
+        status.fail("Schedule", "DISABLED")
+
+    reconciliation_timer_active = (
+        service_property(
+            MONITORING_RECONCILE_TIMER,
+            "ActiveState",
+        ) == "active"
+    )
+    reconciliation_timer_enabled = (
+        service_property(
+            MONITORING_RECONCILE_TIMER,
+            "UnitFileState",
+        ) == "enabled"
+    )
+
+    reconciliation = oneshot_health(
+        MONITORING_RECONCILE_UNIT
+    )
+
+    if not (
+        reconciliation_timer_active
+        and reconciliation_timer_enabled
+    ):
+        reconciliation = "FAILED"
+
+    if reconciliation in ("HEALTHY", "IN PROGRESS"):
+        status.ready("Reconciliation", reconciliation)
+    else:
+        status.fail("Reconciliation", reconciliation)
+
+    provider = monitoring_provider_status()
+
+    if provider is None:
+        status.fail("Provider", "UNKNOWN")
+    else:
+        status.ready("Provider", provider)
+
+    collection = oneshot_health(MONITORING_UNIT)
+
+    if simulation == "monitoring-collection-failed":
+        collection = "FAILED"
+
+    if collection in ("HEALTHY", "IN PROGRESS"):
+        status.ready("Collection", collection)
+    else:
+        status.fail("Collection", collection)
+
+    monitoring_health = monitoring_health_status()
+
+    if simulation == "monitoring-entities-down":
+        monitoring_health = {
+            "counts": {
+                "HEALTHY": 1,
+                "DEGRADED": 0,
+                "DOWN": 2,
+                "UNKNOWN": 0,
+            },
+            "targets": 3,
+            "freshness": "FRESH",
+        }
+
+    if monitoring_health is None:
+        status.fail("Evidence", "UNKNOWN")
+        status.ready("Targets", "UNKNOWN")
+        status.ready("Healthy", "UNKNOWN")
+        status.ready("Degraded", "UNKNOWN")
+        status.ready("Down", "UNKNOWN")
+        status.ready("Unknown", "UNKNOWN")
+    else:
+        evidence = monitoring_health["freshness"]
+
+        if simulation == "monitoring-evidence-stale":
+            evidence = "STALE"
+
+        if evidence == "FRESH":
+            status.ready("Evidence", "FRESH")
+        else:
+            status.fail("Evidence", evidence)
+
+        counts = monitoring_health["counts"]
+
+        status.ready(
+            "Targets",
+            str(monitoring_health["targets"]),
+        )
+        status.ready("Healthy", str(counts["HEALTHY"]))
+        status.ready("Degraded", str(counts["DEGRADED"]))
+        status.ready("Down", str(counts["DOWN"]))
+        status.ready("Unknown", str(counts["UNKNOWN"]))
+
+    print()
+
     print("Verification")
 
     enabled = run_command("systemctl", "is-enabled", VERIFY_TIMER)
