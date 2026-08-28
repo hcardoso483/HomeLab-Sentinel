@@ -10,6 +10,8 @@ SYSUSERS_SOURCE="${SCRIPT_DIR}/sysusers.d/homelab-sentinel.conf"
 SYSUSERS_TARGET="/etc/sysusers.d/homelab-sentinel.conf"
 
 API_UNIT="homelab-sentinel-api.service"
+HOMEPAGE_API_SERVICE="homelab-sentinel-homepage-api.service"
+HOMEPAGE_API_SOCKET="homelab-sentinel-homepage-api.socket"
 VERIFY_UNIT="homelab-sentinel-verify.service"
 VERIFY_TIMER="homelab-sentinel-verify.timer"
 DISCOVERY_UNIT="homelab-sentinel-discovery.service"
@@ -28,6 +30,10 @@ SENTINEL_STATE_DIR="/srv/homelab-sentinel/sentinel"
 INVENTORY_DATABASE="${SENTINEL_STATE_DIR}/inventory.db"
 IDENTITY_DATABASE="${SENTINEL_STATE_DIR}/identity.db"
 RUNTIME_STATE_DIR="${SENTINEL_STATE_DIR}/runtime"
+
+HOMEPAGE_NETWORK_NAME="homelab-network"
+HOMEPAGE_NETWORK_SUBNET="172.18.0.0/16"
+HOMEPAGE_NETWORK_GATEWAY="172.18.0.1"
 
 log_info() {
     echo "[INFO] $*"
@@ -108,6 +114,49 @@ reconcile_sentinel_state_ownership() {
 }
 
 
+reconcile_homepage_network() {
+    local actual_subnet
+    local actual_gateway
+
+    log_info "Reconciling Homepage Docker network..."
+
+    if ! docker network inspect "${HOMEPAGE_NETWORK_NAME}" \
+        >/dev/null 2>&1; then
+        log_info "Creating Homepage Docker network: ${HOMEPAGE_NETWORK_NAME}"
+
+        docker network create \
+            --driver bridge \
+            --subnet "${HOMEPAGE_NETWORK_SUBNET}" \
+            --gateway "${HOMEPAGE_NETWORK_GATEWAY}" \
+            "${HOMEPAGE_NETWORK_NAME}" \
+            >/dev/null ||
+            die "Unable to create Homepage Docker network."
+
+        log_pass "Homepage Docker network created."
+    fi
+
+    actual_subnet="$(
+        docker network inspect "${HOMEPAGE_NETWORK_NAME}" \
+            --format '{{(index .IPAM.Config 0).Subnet}}'
+    )" || die "Unable to inspect Homepage Docker network subnet."
+
+    actual_gateway="$(
+        docker network inspect "${HOMEPAGE_NETWORK_NAME}" \
+            --format '{{(index .IPAM.Config 0).Gateway}}'
+    )" || die "Unable to inspect Homepage Docker network gateway."
+
+    if [[ "${actual_subnet}" != "${HOMEPAGE_NETWORK_SUBNET}" ]]; then
+        die "Homepage Docker network subnet mismatch: expected ${HOMEPAGE_NETWORK_SUBNET}, found ${actual_subnet}"
+    fi
+
+    if [[ "${actual_gateway}" != "${HOMEPAGE_NETWORK_GATEWAY}" ]]; then
+        die "Homepage Docker network gateway mismatch: expected ${HOMEPAGE_NETWORK_GATEWAY}, found ${actual_gateway}"
+    fi
+
+    log_pass "Homepage Docker network ready: ${HOMEPAGE_NETWORK_SUBNET} gateway ${HOMEPAGE_NETWORK_GATEWAY}"
+}
+
+
 reconcile_discovery_schedule() {
     local interval
     local dropin_dir
@@ -170,6 +219,9 @@ require_command systemctl
 require_command python3
 require_command curl
 require_command chown
+require_command docker
+
+reconcile_homepage_network
 
 log_info "Preparing sysusers configuration directory..."
 install -d -m 0755 "$(dirname "${SYSUSERS_TARGET}")"
@@ -185,6 +237,8 @@ reconcile_sentinel_state_ownership
 require_file "${APP_ROOT}/api/server.py"
 require_file "${APP_ROOT}/scripts/verify-sentinel.sh"
 require_file "${SYSTEMD_SOURCE}/${API_UNIT}"
+require_file "${SYSTEMD_SOURCE}/${HOMEPAGE_API_SERVICE}"
+require_file "${SYSTEMD_SOURCE}/${HOMEPAGE_API_SOCKET}"
 require_file "${SYSTEMD_SOURCE}/${VERIFY_UNIT}"
 require_file "${SYSTEMD_SOURCE}/${VERIFY_TIMER}"
 require_file "${SYSTEMD_SOURCE}/${DISCOVERY_UNIT}"
@@ -197,6 +251,8 @@ install -m 0755 "${HLS_SOURCE}" "${HLS_TARGET}"
 log_pass "HomeLab Sentinel CLI installed: ${HLS_TARGET}"
 
 install_unit "${API_UNIT}"
+install_unit "${HOMEPAGE_API_SERVICE}"
+install_unit "${HOMEPAGE_API_SOCKET}"
 install_unit "${VERIFY_UNIT}"
 install_unit "${VERIFY_TIMER}"
 install_unit "${DISCOVERY_UNIT}"
@@ -214,6 +270,9 @@ log_info "Starting Core API..."
 systemctl restart "${API_UNIT}"
 
 wait_for_api
+
+log_info "Enabling Homepage API bridge socket..."
+systemctl enable --now "${HOMEPAGE_API_SOCKET}"
 
 log_info "Enabling Discovery scheduler..."
 

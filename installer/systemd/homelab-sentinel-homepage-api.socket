@@ -1,0 +1,10 @@
+[Unit]
+Description=HomeLab Sentinel Homepage API Bridge Socket
+
+[Socket]
+ListenStream=172.18.0.1:18080
+FreeBind=yes
+Accept=no
+
+[Install]
+WantedBy=sockets.target

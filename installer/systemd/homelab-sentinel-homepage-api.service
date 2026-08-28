@@ -1,0 +1,8 @@
+[Unit]
+Description=HomeLab Sentinel Homepage API Bridge
+Requires=homelab-sentinel-api.service
+After=homelab-sentinel-api.service
+
+[Service]
+Type=notify
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd 127.0.0.1:8000

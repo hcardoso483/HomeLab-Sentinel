@@ -55,6 +55,8 @@ validate_acquired_tree() {
         installer/inventory.py \
         installer/hls \
         installer/systemd/homelab-sentinel-api.service \
+        installer/systemd/homelab-sentinel-homepage-api.service \
+        installer/systemd/homelab-sentinel-homepage-api.socket \
         installer/systemd/homelab-sentinel-verify.service \
         installer/systemd/homelab-sentinel-verify.timer \
         installer/sysusers.d/homelab-sentinel.conf \
