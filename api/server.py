@@ -19,6 +19,7 @@ from core.inventory.inventory import (
     inventory_records,
     unresolved_records,
 )
+from core.status.read_model import build_status
 
 
 def json_bytes(payload):
@@ -62,6 +63,13 @@ class CoreAPIHandler(BaseHTTPRequestHandler):
                 with self.open_database() as connection:
                     version = current_schema_version(connection)
                 self.send_json(200, {"status": "ok", "inventory_schema_version": version})
+                return
+
+            if path == "/api/v1/status":
+                payload = build_status(
+                    api_health_probe=lambda: True,
+                )
+                self.send_json(200, payload)
                 return
 
             if path == "/api/v1/inventory":

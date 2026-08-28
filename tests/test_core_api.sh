@@ -125,6 +125,57 @@ STATUS="$(http_request GET "${BASE_URL}/api/v1/health" "${HEALTH}")"
 json_assert "${HEALTH}"     'data.get("status") == "ok" and isinstance(data.get("inventory_schema_version"), int) and data["inventory_schema_version"] >= 2'     "Health response contract"
 pass "GET /api/v1/health"
 
+STATUS_MODEL="${TMP_DIR}/status.json"
+STATUS="$(http_request GET "${BASE_URL}/api/v1/status" "${STATUS_MODEL}")"
+
+[[ "${STATUS}" == "200" ]] || fail "Status endpoint returned HTTP ${STATUS}"
+
+python3 - "${STATUS_MODEL}" <<'PY_STATUS'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    data = json.load(handle)
+
+required_sections = (
+    "platform",
+    "core_api",
+    "discovery",
+    "inventory",
+    "monitoring",
+    "verification",
+)
+
+if data.get("schema_version") != 1:
+    raise SystemExit("[FAIL] Status schema_version must be 1")
+
+if data.get("overall") not in ("READY", "DEGRADED", "NOT INSTALLED"):
+    raise SystemExit("[FAIL] Status overall state is invalid")
+
+for section in required_sections:
+    if not isinstance(data.get(section), dict):
+        raise SystemExit(f"[FAIL] Status section missing or invalid: {section}")
+
+monitoring = data["monitoring"]
+
+targets = monitoring.get("targets")
+if targets is not None and not isinstance(targets, int):
+    raise SystemExit("[FAIL] Monitoring targets must be integer or null")
+
+entities = monitoring.get("entities")
+if not isinstance(entities, dict):
+    raise SystemExit("[FAIL] Monitoring entities must be an object")
+
+for key in ("healthy", "degraded", "down", "unknown"):
+    value = entities.get(key)
+    if value is not None and not isinstance(value, int):
+        raise SystemExit(
+            f"[FAIL] Monitoring entities.{key} must be integer or null"
+        )
+PY_STATUS
+
+pass "GET /api/v1/status"
+
 LIST="${TMP_DIR}/inventory.json"
 STATUS="$(http_request GET "${BASE_URL}/api/v1/inventory" "${LIST}")"
 [[ "${STATUS}" == "200" ]] || fail "Inventory list returned HTTP ${STATUS}"
