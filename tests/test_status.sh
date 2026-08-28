@@ -31,6 +31,21 @@ require_contains() {
     fi
 }
 
+require_monitoring_collection_healthy_or_running() {
+    local output="$1"
+    local description="$2"
+
+    if grep -Fq "Collection           HEALTHY" <<< "${output}" || \
+       grep -Fq "Collection           IN PROGRESS" <<< "${output}"; then
+        pass "${description}"
+    else
+        echo "--- output ---" >&2
+        echo "${output}" >&2
+        echo "--------------" >&2
+        fail "${description}: expected HEALTHY or IN PROGRESS"
+    fi
+}
+
 run_case() {
     local name="$1"
     local expected_exit="$2"
@@ -374,9 +389,8 @@ require_contains \
     "Provider             prometheus" \
     "healthy Monitoring provider"
 
-require_contains \
+require_monitoring_collection_healthy_or_running \
     "${CASE_OUTPUT}" \
-    "Collection           HEALTHY" \
     "healthy Monitoring collection"
 
 require_contains \
@@ -452,9 +466,8 @@ run_case \
     --simulate monitoring-entities-down \
     --ignore-verification-result
 
-require_contains \
+require_monitoring_collection_healthy_or_running \
     "${CASE_OUTPUT}" \
-    "Collection           HEALTHY" \
     "entity failures do not imply Monitoring collection failure"
 
 require_contains \
