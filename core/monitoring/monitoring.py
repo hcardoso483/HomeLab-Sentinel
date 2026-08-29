@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, json, subprocess, sys
+import argparse, json, sqlite3, subprocess, sys
 from pathlib import Path
 
 APP_ROOT = Path("/opt/homelab-sentinel/app")
@@ -324,14 +324,152 @@ def emit_status_human(status):
     )
 
 
+def monitoring_history(database, entity_id):
+    if not database.is_file():
+        raise RuntimeError(
+            f"Inventory database not found: {database}"
+        )
+
+    try:
+        with sqlite3.connect(database) as connection:
+            version = connection.execute(
+                "PRAGMA user_version"
+            ).fetchone()[0]
+
+            if version < 3:
+                raise RuntimeError(
+                    f"inventory schema version {version} "
+                    "does not support Monitoring history"
+                )
+
+            entity = connection.execute(
+                """
+                SELECT 1
+                FROM entities
+                WHERE entity_id = ?
+                """,
+                (entity_id,),
+            ).fetchone()
+
+            if entity is None:
+                raise RuntimeError(
+                    f"Living Inventory entity not found: {entity_id}"
+                )
+
+            rows = connection.execute(
+                """
+                SELECT
+                    entity_id,
+                    checked_at,
+                    received_at,
+                    provider,
+                    check_type,
+                    target,
+                    status,
+                    latency_ms
+                FROM monitoring_observations
+                WHERE entity_id = ?
+                ORDER BY
+                    checked_at DESC,
+                    monitoring_observation_id DESC
+                """,
+                (entity_id,),
+            ).fetchall()
+
+    except sqlite3.Error as exc:
+        raise RuntimeError(
+            f"Monitoring history query failed: {exc}"
+        ) from exc
+
+    return [
+        {
+            "entity_id": row[0],
+            "checked_at": row[1],
+            "received_at": row[2],
+            "provider": row[3],
+            "check_type": row[4],
+            "target": row[5],
+            "status": row[6],
+            "latency_ms": row[7],
+        }
+        for row in rows
+    ]
+
+
+def emit_history_json(records):
+    try:
+        for record in records:
+            print(
+                json.dumps(
+                    record,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
+            sys.stdout.flush()
+    except BrokenPipeError:
+        try:
+            sys.stdout.close()
+        except BrokenPipeError:
+            pass
+
+
+def emit_history_human(entity_id, records):
+    try:
+        print("HomeLab Sentinel Monitoring History")
+        print()
+        print(f"Entity             {entity_id}")
+        print()
+
+        if not records:
+            print("No Monitoring evidence is available for this entity.")
+            return
+
+        print(
+            f"{'CHECKED_AT':<30} "
+            f"{'PROVIDER':<12} "
+            f"{'CHECK':<14} "
+            f"{'TARGET':<24} "
+            f"{'STATUS':<9} "
+            "LATENCY_MS"
+        )
+
+        for record in records:
+            latency = (
+                "-"
+                if record["latency_ms"] is None
+                else str(record["latency_ms"])
+            )
+
+            print(
+                f"{record['checked_at']:<30} "
+                f"{record['provider']:<12} "
+                f"{record['check_type']:<14} "
+                f"{record['target']:<24} "
+                f"{record['status']:<9} "
+                f"{latency}"
+            )
+
+    except BrokenPipeError:
+        try:
+            sys.stdout.close()
+        except BrokenPipeError:
+            pass
+
+
 def main():
     parser = argparse.ArgumentParser(description="HomeLab Sentinel Monitoring Core")
     parser.add_argument(
         "command",
         nargs="?",
         default="targets",
-        choices=("targets", "provider", "health", "status"),
+        choices=("targets", "provider", "health", "status", "history"),
         help="Monitoring query command (default: targets)",
+    )
+    parser.add_argument(
+        "entity_id",
+        nargs="?",
+        help="Living Inventory entity_id for commands that require one",
     )
     parser.add_argument(
         "--database", type=Path, default=DEFAULT_DATABASE,
@@ -346,6 +484,15 @@ def main():
         help="TEST ONLY: override Monitoring evaluation time with a UTC timestamp",
     )
     args = parser.parse_args()
+
+    if args.command == "history":
+        if not args.entity_id:
+            parser.error("history requires <entity-id>")
+    elif args.entity_id is not None:
+        parser.error(
+            f"{args.command} does not accept <entity-id>"
+        )
+
     try:
         if args.command == "provider":
             provider = monitoring_provider()
@@ -387,6 +534,22 @@ def main():
                 emit_status_json(status)
             else:
                 emit_status_human(status)
+
+            return 0
+
+        if args.command == "history":
+            records = monitoring_history(
+                args.database,
+                args.entity_id,
+            )
+
+            if args.json:
+                emit_history_json(records)
+            else:
+                emit_history_human(
+                    args.entity_id,
+                    records,
+                )
 
             return 0
 
