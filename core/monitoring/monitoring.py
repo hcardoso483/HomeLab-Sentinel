@@ -191,13 +191,146 @@ def emit_provider_human(provider):
     print(f"{'Status':<18} {provider['status']}")
 
 
+def monitoring_health(database, *, now=None):
+    if not HEALTH.is_file():
+        raise RuntimeError(
+            f"Monitoring health evaluator not found: {HEALTH}"
+        )
+
+    command = [
+        str(HEALTH),
+        "--database",
+        str(database),
+        "--json",
+    ]
+
+    if now:
+        command.extend(["--now", now])
+
+    result = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(
+            detail or "Monitoring health evaluation failed"
+        )
+
+    records = []
+
+    for line_number, line in enumerate(
+        result.stdout.splitlines(),
+        start=1,
+    ):
+        if not line.strip():
+            continue
+
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                "Monitoring health evaluator returned invalid JSON "
+                f"on line {line_number}: {exc}"
+            ) from exc
+
+        if not isinstance(record, dict):
+            raise RuntimeError(
+                "Monitoring health evaluator returned a non-object "
+                f"record on line {line_number}"
+            )
+
+        records.append(record)
+
+    return records
+
+
+def monitoring_status(database, *, now=None):
+    provider = monitoring_provider()
+    health = monitoring_health(database, now=now)
+
+    counts = {
+        "healthy": 0,
+        "degraded": 0,
+        "down": 0,
+        "unknown": 0,
+    }
+
+    latest = None
+
+    for record in health:
+        state = record.get("state")
+
+        if state not in {
+            "HEALTHY",
+            "DEGRADED",
+            "DOWN",
+            "UNKNOWN",
+        }:
+            raise RuntimeError(
+                f"Monitoring health returned invalid state: {state!r}"
+            )
+
+        counts[state.lower()] += 1
+
+        checked_at = record.get("latest_checked_at")
+        if checked_at is not None:
+            if not isinstance(checked_at, str) or not checked_at:
+                raise RuntimeError(
+                    "Monitoring health returned invalid latest_checked_at"
+                )
+
+            if latest is None or checked_at > latest:
+                latest = checked_at
+
+    return {
+        "provider": provider,
+        "targets": len(health),
+        "entities": counts,
+        "last_evaluation": latest,
+    }
+
+
+def emit_status_json(status):
+    print(
+        json.dumps(
+            status,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
+
+
+def emit_status_human(status):
+    provider = status["provider"]
+    entities = status["entities"]
+
+    print("HomeLab Sentinel Monitoring")
+    print()
+    print(f"{'Provider':<18} {provider['provider']}")
+    print(f"{'Provider status':<18} {provider['status']}")
+    print(f"{'Targets':<18} {status['targets']}")
+    print(f"{'Healthy':<18} {entities['healthy']}")
+    print(f"{'Degraded':<18} {entities['degraded']}")
+    print(f"{'Down':<18} {entities['down']}")
+    print(f"{'Unknown':<18} {entities['unknown']}")
+    print(
+        f"{'Last evaluation':<18} "
+        f"{status['last_evaluation'] or '-'}"
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="HomeLab Sentinel Monitoring Core")
     parser.add_argument(
         "command",
         nargs="?",
         default="targets",
-        choices=("targets", "provider", "health"),
+        choices=("targets", "provider", "health", "status"),
         help="Monitoring query command (default: targets)",
     )
     parser.add_argument(
@@ -206,7 +339,11 @@ def main():
     )
     parser.add_argument(
         "--json", action="store_true",
-        help="Emit one canonical JSON target per line",
+        help="Emit canonical JSON output",
+    )
+    parser.add_argument(
+        "--now",
+        help="TEST ONLY: override Monitoring evaluation time with a UTC timestamp",
     )
     args = parser.parse_args()
     try:
@@ -230,8 +367,28 @@ def main():
             ]
             if args.json:
                 command.append("--json")
+            if args.now:
+                command.extend(["--now", args.now])
             result = subprocess.run(command, check=False)
             return result.returncode
+
+        if args.command == "status":
+            if not args.database.is_file():
+                raise RuntimeError(
+                    f"Inventory database not found: {args.database}"
+                )
+
+            status = monitoring_status(
+                args.database,
+                now=args.now,
+            )
+
+            if args.json:
+                emit_status_json(status)
+            else:
+                emit_status_human(status)
+
+            return 0
 
         if not args.database.is_file():
             error(f"Inventory database not found: {args.database}")
