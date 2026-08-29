@@ -2,11 +2,11 @@
 
 > **One dashboard. Complete visibility.**
 
-HomeLab Sentinel is an open-source, self-hosted platform designed to discover, monitor, and help manage homelab infrastructure through a unified and modular architecture.
+HomeLab Sentinel is an open-source, self-hosted platform designed to discover, understand, monitor, and help manage homelab infrastructure through a unified and modular architecture.
 
-Rather than replacing proven open-source monitoring and infrastructure tools, HomeLab Sentinel aims to integrate them into a cohesive platform that is easier to deploy, configure, maintain, and understand.
+Rather than replacing proven open-source monitoring and infrastructure tools, HomeLab Sentinel integrates them behind a Sentinel-owned core that maintains infrastructure identity and state, coordinates providers, and exposes a consistent view of the homelab.
 
-The project is currently in **early alpha development**. Its core architecture and module lifecycle are functional, while network discovery, deeper monitoring integrations, alerting, and the unified dashboard experience continue to be developed.
+The project is currently in **alpha development**. Core platform foundations, automatic network discovery, Living Inventory, persistent device identity, Monitoring v1, boot verification, and initial dashboard integration are operational and have been tested against a real homelab.
 
 ---
 
@@ -14,11 +14,13 @@ The project is currently in **early alpha development**. Its core architecture a
 
 **Version:** 0.1.0-alpha
 
-HomeLab Sentinel has progressed beyond the initial architecture and design phase. A functional core platform is now being built and tested against real modules.
+HomeLab Sentinel has progressed from architectural foundations into an operational platform.
 
-### Implemented
+The current implementation can automatically discover devices, correlate observations into persistent identities, maintain a Living Inventory, derive monitoring targets, collect real reachability evidence through Prometheus and Blackbox Exporter, evaluate canonical device health, preserve monitoring history, recover automatically after reboot, and expose canonical platform status through the Sentinel CLI and Core API.
 
-The current foundation includes:
+### Implemented Platform Foundations
+
+The following foundations have been implemented and regression-tested:
 
 - Module Registry
 - Module metadata and specification validation
@@ -39,30 +41,133 @@ The current foundation includes:
 
 The deployment lifecycle has been exercised with Prometheus, including installation, health verification, update, uninstall, persistent data preservation, and reinstallation.
 
-### Registered Modules
+### Discovery and Living Inventory
 
-The repository currently includes module definitions for:
+The Discovery and Living Inventory foundations are operational.
 
-- **Prometheus** — metrics collection and monitoring provider
-- **Homepage** — dashboard provider
+Current capabilities include:
 
-Additional providers and modules can be added through the modular architecture as development progresses.
+- Automatic network discovery using a provider-neutral Discovery contract
+- Configurable discovery scope
+- Multi-pass discovery
+- Validated discovery observations
+- Observation correlation
+- Persistent Sentinel-owned device identities
+- MAC-aware identity correlation
+- Stable identity across rediscovery and reboot
+- Living Inventory persistence
+- Discovery scheduling
+- Shared runtime locking for inventory-mutating operations
+- Discovery freshness and runtime status
+- Regression and real-network testing
 
-### Under Development
+Discovery produces observations. Permanent infrastructure identity remains owned by the Sentinel Core.
 
-Major areas still being developed include:
+### Monitoring v1 — Complete
 
-- Network discovery
-- Device inventory
-- Service discovery
-- Host and infrastructure monitoring
-- Automated monitoring configuration
-- Alerting
-- Historical infrastructure state
-- Dashboard integration
+Monitoring v1 is implemented, contract-tested, real-homelab tested, soak-tested, and reboot-proven.
+
+Current capabilities include:
+
+- Monitoring targets derived from Living Inventory identities
+- Provider-neutral target derivation
+- Capability-based monitoring provider resolution
+- Prometheus as the current default monitoring provider
+- Prometheus file-based target reconciliation
+- Blackbox Exporter ICMP reachability probing
+- Provider adapter boundary
+- Sentinel-owned normalized monitoring observations
+- Persistent monitoring evidence and history
+- Evidence freshness evaluation
+- Canonical health states:
+  - `UNKNOWN`
+  - `HEALTHY`
+  - `DEGRADED`
+  - `DOWN`
+- Protection against false device-down conclusions when a provider fails
+- Automatic monitoring reconciliation
+- Automatic monitoring collection
+- Shared runtime serialization with Discovery and verification
+- CLI surfaces for:
+  - Monitoring status
+  - Provider resolution
+  - Targets
+  - Health
+  - History
+- Real device offline/recovery validation
+- Unattended soak testing
+- Autonomous restart and reboot recovery
+
+Monitoring v1 reached its completed project checkpoint at commit:
+
+```text
+15bd0a9 Add Monitoring history CLI
+```
+
+### Platform Status and Self-Verification
+
+HomeLab Sentinel also provides operational self-status and boot verification.
+
+Implemented capabilities include:
+
+- Core API
+- Canonical structured platform status
+- CLI platform status
+- Inventory integrity reporting
+- Discovery scheduler and freshness status
+- Monitoring scheduler and evidence status
+- Boot readiness verification
+- Stable discovery-pass requirement during startup
+- Post-boot verification
+- Automatic systemd scheduling
+- Sentinel service identity
+- Clean autonomous recovery after reboot
+
+The platform does not report itself ready until its required boot-readiness conditions have been satisfied.
+
+### Dashboard Integration
+
+Homepage is currently used as the first presentation provider.
+
+Implemented integration includes:
+
+- Homepage module deployment
+- Persistent configuration
+- Container health checking
+- Sentinel status presentation
+- Read-only access to canonical Sentinel status
+- A restricted API bridge between Homepage and the loopback-bound Sentinel Core API
+
+Homepage is a presentation layer. It does not calculate authoritative Sentinel health and does not query monitoring providers directly for Sentinel-owned meaning.
+
+The long-term native Sentinel UI remains a future development goal.
+
+### Registered and Operational Providers
+
+Current provider/module work includes:
+
+- **Prometheus** — monitoring provider
+- **Blackbox Exporter** — internal reachability probe dependency used by the Prometheus monitoring implementation
+- **Homepage** — dashboard/presentation provider
+- **nmap** — current network discovery provider
+
+Provider-specific implementation is kept behind Sentinel contracts wherever practical so that the Core remains responsible for orchestration and authoritative state rather than provider-specific behavior.
+
+### Still Under Development
+
+Major v1 areas that remain include:
+
+- Deeper device understanding and classification
+- Service and open-port discovery
+- Host and infrastructure resource monitoring
+- Container and virtual-machine monitoring
+- Broader historical metrics
+- Alerting and notifications
+- Richer dashboard presentation
 - Installation and configuration experience
+- Additional providers and integrations
 
-HomeLab Sentinel should currently be considered **development software**, not a finished monitoring distribution.
+HomeLab Sentinel should still be considered **alpha development software**, not a finished monitoring distribution.
 
 ---
 
@@ -75,10 +180,10 @@ HomeLab Sentinel aims to provide the intelligent layer connecting those componen
 The long-term goal is to:
 
 - Automatically discover devices on the network.
-- Build and maintain a living inventory of the homelab.
+- Build and maintain a Living Inventory of the homelab.
 - Detect running services and open ports.
-- Monitor CPU, memory, storage, containers, virtual machines, and applications.
-- Collect historical metrics.
+- Monitor CPU, memory, storage, containers, virtual machines, applications, and network health.
+- Collect historical infrastructure state and metrics.
 - Generate meaningful alerts.
 - Present infrastructure through a single unified dashboard.
 
@@ -92,6 +197,12 @@ The platform should require as little manual configuration as reasonably possibl
 
 If HomeLab Sentinel can safely determine something automatically, the user should not have to configure it manually.
 
+### Understanding Before Monitoring
+
+Monitoring is more valuable when Sentinel understands the infrastructure being monitored.
+
+Discovery observations are correlated into Sentinel-owned identities before they become authoritative infrastructure state.
+
 ### Single Dashboard
 
 Infrastructure information should ultimately be accessible through one consistent interface.
@@ -100,13 +211,19 @@ Infrastructure information should ultimately be accessible through one consisten
 
 Monitoring engines, dashboards, discovery components, and other providers should be replaceable without redesigning the core platform.
 
+### Sentinel-Owned Meaning
+
+External providers collect or expose evidence.
+
+HomeLab Sentinel remains authoritative for infrastructure identity, correlation, health interpretation, platform state, and the meaning presented to users.
+
 ### User Choice
 
 User-selected providers take priority. Sensible installation defaults provide a predictable starting point and recovery mechanism.
 
 ### Separation of Responsibilities
 
-Discovery, provider resolution, acquisition, deployment, monitoring, and presentation remain separate concerns with defined interfaces between them.
+Discovery, inventory, identity, provider resolution, acquisition, deployment, monitoring, and presentation remain separate concerns with defined interfaces between them.
 
 ### Safe Lifecycle Management
 
@@ -122,56 +239,119 @@ HomeLab Sentinel aims to provide powerful infrastructure monitoring without requ
 
 ### Production Mindset
 
-Even during early development, the project favors reproducible deployments, explicit validation, useful failure messages, predictable behavior, and documented architecture.
+Even during alpha development, the project favors reproducible deployments, explicit validation, useful failure messages, predictable behavior, safe failure semantics, documented architecture, and real-world verification.
 
 ---
 
 ## Architecture
 
-HomeLab Sentinel uses a capability-driven modular architecture.
+HomeLab Sentinel uses a capability-driven modular architecture built around a Sentinel-owned Core.
 
-Modules declare what they provide through metadata. Core components determine which provider should satisfy a requested capability and how that provider should be acquired and deployed.
+A simplified operational flow is:
 
-A simplified deployment flow is:
+```text
+Infrastructure
+      |
+      v
+Discovery Provider
+      |
+      v
+Validated Observations
+      |
+      v
+Sentinel Core
+      |
+      +----> Identity Correlation
+      |
+      +----> Living Inventory
+      |
+      v
+Monitoring Target Derivation
+      |
+      v
+Provider Resolver
+      |
+      v
+Monitoring Provider
+      |
+      v
+Provider Evidence
+      |
+      v
+Monitoring Adapter
+      |
+      v
+Canonical Monitoring Observations
+      |
+      v
+Sentinel Health Evaluation
+      |
+      v
+Core API / CLI
+      |
+      v
+Presentation Layer
+```
+
+Provider selection and deployment remain capability-driven.
+
+A simplified provider deployment flow is:
 
 ```text
 Requested Capability
         |
         v
-  Provider Resolver
+Provider Resolver
         |
         v
- Selected Provider
+Selected Provider
         |
         v
 Provider Acquisition
         |
         v
- Deployment Engine
+Deployment Engine
         |
         v
 Metadata / Dependency Validation
         |
         v
-   Module Deployment
+Module Deployment
         |
         v
-  Health Verification
+Health Verification
 ```
 
-This separation allows the platform to support multiple implementations of the same capability without embedding provider-specific decisions into the core engine.
+This separation allows HomeLab Sentinel to support multiple implementations of the same capability without making provider-specific behavior authoritative inside the Core.
 
 ---
 
 ## Core Components
 
+### Sentinel Core
+
+The Sentinel Core owns authoritative HomeLab Sentinel state and orchestration.
+
+Current responsibilities include:
+
+- Infrastructure identity
+- Living Inventory
+- Observation correlation
+- Provider resolution
+- Monitoring orchestration
+- Monitoring health evaluation
+- Platform status
+- Boot readiness
+- Core API
+- CLI status surfaces
+
 ### Module Registry
 
-The Registry discovers module metadata and provides a central view of registered modules, capabilities, and provider information.
+The Registry discovers module metadata and provides a central view of registered modules, capabilities, provider information, and provider entrypoints.
 
 ### Provider Resolver
 
-The Provider Resolver determines which registered module should provide a requested capability.
+The Provider Resolver determines which registered provider should satisfy a requested capability.
 
 Explicit user configuration has priority. Installation defaults can be used when an explicit selection is not available.
 
@@ -183,7 +363,7 @@ Docker image acquisition is currently supported.
 
 ### Deployment Engine
 
-The Deployment Engine manages the basic module lifecycle.
+The Deployment Engine manages the module lifecycle.
 
 Current lifecycle operations include:
 
@@ -201,52 +381,37 @@ Healthchecks support retries so that services which require startup time are not
 
 Uninstall operations preserve persistent Docker volumes by default.
 
----
+### Discovery
 
-## Module System
+Discovery providers observe infrastructure and return validated observations.
 
-Modules live beneath the `compose/` hierarchy and describe themselves through `metadata.yml`.
+Discovery itself does not own permanent device identity.
 
-Current modules include:
+### Living Inventory and Identity
 
-```text
-compose/
-├── core/
-│   └── homepage/
-│       └── metadata.yml
-│
-└── monitoring/
-    └── prometheus/
-        └── metadata.yml
-```
+The Living Inventory is the Sentinel-owned representation of discovered infrastructure.
 
-Module metadata describes information such as:
+Correlation converts observations into persistent identities and maintains continuity as devices are rediscovered or their observations change.
 
-- Module identity
-- Version
-- Category
-- Capabilities
-- Dependencies
-- Acquisition source
-- Compose definition
-- Healthcheck
-- Lifecycle scripts
+### Monitoring
 
-The core platform should avoid module-specific deployment logic whenever a behavior can be expressed through the module specification.
+Monitoring consumes canonical Living Inventory targets and provider evidence.
+
+Providers perform monitoring work, while Sentinel owns normalized observations, persistence, freshness rules, health evaluation, and canonical health state.
+
+### Core API and CLI
+
+Canonical Sentinel state is exposed through stable Core interfaces rather than requiring presentation layers to inspect internal databases, systemd state, provider APIs, or runtime files directly.
+
+### Presentation
+
+Presentation providers consume Sentinel-owned state.
+
+Homepage currently provides the first read-only Sentinel status integration.
 
 ---
 
-## Planned Capabilities
-
-### Network Discovery
-
-Planned capabilities include:
-
-- Automatic IP discovery
-- Device identification
-- Hostname resolution
-- MAC vendor detection
-- Operating system detection where practical
+## Planned v1 Capabilities
 
 ### Service Discovery
 
@@ -260,14 +425,16 @@ Planned capabilities include:
 - Home Assistant detection
 - Web application discovery
 
-### Monitoring
+### Infrastructure Monitoring
 
-The long-term monitoring layer is intended to cover:
+Monitoring v1 establishes the provider-neutral monitoring foundation and reachability health model.
+
+Future v1 monitoring coverage is intended to expand toward useful infrastructure results such as:
 
 - CPU
 - Memory
 - Storage
-- SMART disk health
+- SMART disk health where practical
 - Docker containers
 - Virtual machines
 - Services
@@ -286,7 +453,7 @@ Planned notification and alert integrations include:
 
 ### Dashboard
 
-The unified interface is intended to eventually provide:
+The unified interface is intended to progressively provide:
 
 - Device inventory
 - Service inventory
@@ -296,6 +463,8 @@ The unified interface is intended to eventually provide:
 - Historical trends
 - Recent infrastructure changes
 
+The current Homepage integration provides an initial read-only presentation layer while these capabilities are developed.
+
 ---
 
 ## Repository Structure
@@ -304,21 +473,36 @@ A simplified view of the current repository is:
 
 ```text
 HomeLab-Sentinel/
+├── api/
 ├── compose/
 │   ├── core/
-│   └── monitoring/
-│
+│   ├── discovery/
+│   ├── infrastructure/
+│   ├── logging/
+│   ├── monitoring/
+│   └── optional/
 ├── config/
+│   ├── homepage/
 │   └── sentinel/
-│
 ├── core/
 │   ├── acquisition/
 │   ├── deployment/
+│   ├── discovery/
+│   ├── identity/
+│   ├── inventory/
 │   ├── lib/
-│   └── resolver/
-│
+│   ├── logs/
+│   ├── monitoring/
+│   ├── pipeline/
+│   ├── resolver/
+│   └── status/
 ├── docs/
+├── installer/
 ├── registry/
+├── scripts/
+├── services/
+├── templates/
+├── tests/
 ├── docker-compose.yml
 ├── .env.example
 └── README.md
@@ -328,7 +512,7 @@ HomeLab-Sentinel/
 
 ## Documentation
 
-The repository contains detailed design and implementation documentation.
+The repository contains detailed design, contract, and implementation documentation.
 
 Important documents include:
 
@@ -339,6 +523,16 @@ Important documents include:
 - `docs/REGISTRY.md` — Module Registry design
 - `docs/PROVIDER_ARCHITECTURE.md` — provider selection, defaults, acquisition, and resolution
 - `docs/DEPLOYMENT_ENGINE.md` — module deployment and lifecycle management
+- `docs/DISCOVERY_CONTRACT.md` — Discovery responsibility and observation contract
+- `docs/LIVING_INVENTORY.md` — Living Inventory behavior
+- `docs/PERSISTENT_IDENTITY_CONTRACT.md` — persistent infrastructure identity semantics
+- `docs/MONITORING_CONTRACT.md` — canonical Monitoring v1 contract
+- `docs/MONITORING_ORCHESTRATION_CONTRACT.md` — provider-neutral Monitoring orchestration
+- `docs/MONITORING_PROVIDER_ADAPTER.md` — monitoring provider adapter boundary
+- `docs/MONITORING_PROVIDER_TARGETS.md` — provider target derivation contract
+- `docs/PROMETHEUS_REACHABILITY_PROBE.md` — Prometheus/Blackbox reachability integration
+- `docs/BOOT_READINESS_CONTRACT.md` — startup readiness semantics
+- `docs/CORE_API.md` — Core API behavior
 - `docs/ENGINEERING.md` — engineering principles
 - `docs/DEVELOPMENT_LOG.md` — development history and implementation notes
 
@@ -352,7 +546,7 @@ HomeLab Sentinel is not intended to reinvent the excellent monitoring software t
 
 Instead, it provides an intelligent integration and orchestration layer around proven open-source technologies.
 
-The platform should determine what infrastructure exists, select appropriate monitoring components, automate their deployment and configuration where possible, and present the resulting information through a consistent experience.
+The platform should determine what infrastructure exists, establish persistent Sentinel-owned identity, select appropriate providers, automate their deployment and configuration where possible, interpret provider evidence safely, and present the resulting information through a consistent experience.
 
 The objective is to reduce complexity without removing flexibility or user control.
 
@@ -372,16 +566,18 @@ The repository documents that collaborative development process as the project e
 
 ## Contributing
 
-HomeLab Sentinel is still in early development, and contributions, suggestions, bug reports, testing, and architectural feedback are welcome.
+HomeLab Sentinel is still in alpha development, and contributions, suggestions, bug reports, testing, and architectural feedback are welcome.
 
 When contributing, please keep the project's core principles in mind:
 
 - Prefer modular solutions over provider-specific core logic.
 - Preserve user choice.
 - Avoid unnecessary configuration.
+- Keep Sentinel authoritative for Sentinel-owned meaning.
 - Fail safely and provide actionable diagnostics.
 - Protect persistent user data.
 - Keep implementation and documentation aligned.
+- Validate behavior before declaring a capability complete.
 
 ---
 
