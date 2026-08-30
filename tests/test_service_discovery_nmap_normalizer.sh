@@ -41,11 +41,11 @@ cat > "${XML}" <<'XML'
     <ports>
       <port protocol="tcp" portid="8006">
         <state state="open"/>
-        <service name="http"/>
+        <service name="http" method="probed" conf="10"/>
       </port>
       <port protocol="tcp" portid="2222">
         <state state="open"/>
-        <service name="ssh"/>
+        <service name="ssh" method="probed" conf="10"/>
       </port>
       <port protocol="tcp" portid="12345">
         <state state="open"/>
@@ -139,6 +139,73 @@ print("[PASS] closed endpoint is not emitted")
 PY
 
 pass "Nmap Service Discovery normalization contract"
+
+echo
+echo "=== SERVICE IDENTIFICATION TRUST REGRESSION ==="
+
+TRUST_XML="$(mktemp)"
+trap 'rm -f "${TRUST_XML}"' EXIT
+
+cat > "${TRUST_XML}" <<'XML'
+<?xml version="1.0"?>
+<nmaprun>
+  <host starttime="1788055079" endtime="1788055079">
+    <status state="up"/>
+    <ports>
+      <port protocol="tcp" portid="22">
+        <state state="open"/>
+        <service name="ssh" product="OpenSSH" method="probed" conf="10"/>
+      </port>
+      <port protocol="tcp" portid="3128">
+        <state state="open"/>
+        <service name="http"
+                 product="Proxmox Virtual Environment REST API"
+                 method="probed"
+                 conf="10"/>
+      </port>
+      <port protocol="tcp" portid="8006">
+        <state state="open"/>
+        <service name="wpl-analytics" method="table" conf="3"/>
+      </port>
+      <port protocol="tcp" portid="33393">
+        <state state="open"/>
+      </port>
+    </ports>
+  </host>
+</nmaprun>
+XML
+
+TRUST_OUTPUT="$(
+    "${NORMALIZER}" \
+        --entity-id "dev-trust-test" \
+        --address "192.168.1.58" \
+        < "${TRUST_XML}"
+)"
+
+python3 - "${TRUST_OUTPUT}" <<'PY'
+import json
+import sys
+
+records = [
+    json.loads(line)
+    for line in sys.argv[1].splitlines()
+    if line.strip()
+]
+
+by_port = {record["port"]: record for record in records}
+
+assert by_port[22]["service"] == "ssh", by_port[22]
+assert by_port[3128]["service"] == "http", by_port[3128]
+
+assert by_port[8006]["service"] is None, (
+    "table-derived Nmap service label leaked into canonical evidence: "
+    + repr(by_port[8006])
+)
+
+assert by_port[33393]["service"] is None, by_port[33393]
+PY
+
+echo "[PASS] only probed Nmap service identity becomes canonical evidence"
 
 echo
 echo "=== RESULT ==="

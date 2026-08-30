@@ -51,11 +51,11 @@ cat <<'XML'
     <ports>
       <port protocol="tcp" portid="8006">
         <state state="open"/>
-        <service name="http"/>
+        <service name="http" method="probed" conf="10"/>
       </port>
       <port protocol="tcp" portid="2222">
         <state state="open"/>
-        <service name="ssh"/>
+        <service name="ssh" method="probed" conf="10"/>
       </port>
       <port protocol="tcp" portid="12345">
         <state state="open"/>

@@ -28,6 +28,12 @@ def normalize_service_name(port):
     if service is None:
         return None
 
+    # Nmap service names derived only from its static port table are not
+    # factual service-identification evidence. Canonical service identity
+    # requires an active service probe.
+    if service.get("method") != "probed":
+        return None
+
     name = service.get("name")
 
     if not name or name == "unknown":
