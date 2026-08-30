@@ -321,17 +321,36 @@ Presentation is intentionally separated from authoritative Sentinel state.
 
 The current presentation provider is Homepage.
 
-Homepage currently provides:
+Homepage provides the high-level operational view of HomeLab Sentinel:
 
 - General homelab dashboard functionality
 - Read-only Sentinel platform status
+- High-level capability readiness and health
 - Access to canonical status through a restricted API bridge
 
 Homepage does not calculate authoritative Sentinel health.
 
 It does not query Prometheus directly to determine Sentinel-owned health semantics.
 
-The long-term native Sentinel UI remains a future goal.
+The native Sentinel UI is intended to provide the detailed operational view of discovered infrastructure. It should consume canonical Sentinel Core interfaces and expose, where evidence is available:
+
+- Living Inventory entities and their current addresses
+- Whether devices are currently observed, reachable, or otherwise known only from historical state
+- Discovered network endpoints, including address, protocol, and port
+- Trusted service identification and higher-level function or classification
+- Unknown or unclassified open endpoints without inventing meaning
+- Monitoring state and relevant historical evidence
+- User-facing interaction capabilities derived from trusted service or classification evidence
+
+The native UI must distinguish endpoint evidence from inferred function. An open port alone is not sufficient to claim a particular application or management interface.
+
+Where Sentinel has sufficient trusted evidence, the UI may offer an explicit interaction such as `Open Interface`. Merely presenting an available interaction must not initiate it.
+
+Interaction execution is always user initiated. Background discovery, monitoring, classification, refresh, reconciliation, or presentation must never automatically open, connect to, authenticate against, or execute actions on a discovered service.
+
+The guiding interaction principle is:
+
+> **Discover automatically. Understand automatically. Monitor automatically. Assist automatically. Act only when the user asks.**
 
 Presentation layers should consume stable Sentinel Core interfaces so that they can evolve independently of Discovery, Inventory, Monitoring, and provider implementations.
 
@@ -497,18 +516,23 @@ Planned areas include:
 
 The current Homepage integration is the first presentation layer.
 
-Future v1 presentation work may expose:
+Future presentation work should expose:
 
 - Living Inventory
+- Current device addresses and activity/state
 - Device health
-- Service inventory
+- Service inventory with protocol, port, and trusted service/function
+- Unknown or unclassified endpoints without guessing
+- User-requested access to available management or application interfaces
 - Container and VM status
 - Resource utilization
 - Alerts
 - Historical trends
 - Recent infrastructure changes
 
-UI refinement and a native Sentinel UI belong to later development unless required by a future v1 contract.
+Homepage remains the high-level operational dashboard. The native Sentinel UI is the detailed infrastructure exploration and interaction surface.
+
+Detailed UI layout may evolve later, but the separation of responsibilities and the explicit user-action boundary for interaction are architectural requirements.
 
 ---
 

@@ -563,6 +563,41 @@ Monitoring must not be required to perform Service Discovery itself.
 Likewise, Service Discovery must not determine health using Monitoring
 semantics.
 
+
+---
+
+# Interaction Safety Boundary
+
+Service Discovery may determine that a discovered endpoint is suitable for user interaction, but discovery itself must never initiate that interaction.
+
+Interaction availability may be derived automatically from trusted endpoint and classification evidence.
+
+Interaction execution must always require an explicit user action.
+
+Examples of interaction capabilities may include:
+
+- opening a discovered web management interface
+- launching an SSH connection target
+- opening an RDP endpoint
+- exposing an SMB path
+- opening an application-specific interface
+
+Background discovery, monitoring, refresh, reconciliation, classification, status rendering, or other autonomous Sentinel activity must never automatically open, connect to, authenticate against, or execute actions on a discovered service.
+
+A discovered open port alone is not sufficient evidence to create an interaction action.
+
+The UI must not infer interaction semantics directly from port numbers. Interaction availability must be derived from trusted service or classification evidence.
+
+An interaction capability being marked as available means only that Sentinel has sufficient trusted evidence to offer that capability to the user. It does not authorize or initiate the interaction.
+
+For web interfaces, Sentinel may expose an explicit user-facing action such as `Open Interface`. Navigation to that interface occurs only after the user selects that action.
+
+More powerful interaction types, including remote shells, remote desktops, file shares, APIs, or future administrative operations, must preserve the same explicit user-action boundary. Additional confirmation or authorization may be required where appropriate.
+
+The canonical interaction principle is:
+
+> **Discover automatically. Understand automatically. Monitor automatically. Assist automatically. Act only when the user asks.**
+
 ---
 
 # Initial v1 Scope
