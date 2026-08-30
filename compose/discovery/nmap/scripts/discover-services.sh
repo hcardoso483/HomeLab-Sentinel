@@ -28,6 +28,8 @@ trap 'rm -rf "${TMP_DIR}"' EXIT
 
 STAGE1_XML="${TMP_DIR}/stage1.xml"
 STAGE2_XML="${TMP_DIR}/stage2.xml"
+STAGE1_JSON="${TMP_DIR}/stage1.jsonl"
+STAGE2_JSON="${TMP_DIR}/stage2.jsonl"
 
 #
 # Stage 1:
@@ -120,10 +122,58 @@ if nmap \
     "${ADDRESS}" \
     > "${STAGE2_XML}"
 then
+    #
+    # Stage 1 remains authoritative for endpoint existence.
+    # Stage 2 may enrich matching endpoints with trusted service identity,
+    # but it must not create or remove endpoint facts.
+    #
     "${NORMALIZER}" \
         --entity-id "${ENTITY_ID}" \
         --address "${ADDRESS}" \
-        < "${STAGE2_XML}"
+        --suppress-services \
+        < "${STAGE1_XML}" \
+        > "${STAGE1_JSON}"
+
+    "${NORMALIZER}" \
+        --entity-id "${ENTITY_ID}" \
+        --address "${ADDRESS}" \
+        < "${STAGE2_XML}" \
+        > "${STAGE2_JSON}"
+
+    python3 - "${STAGE1_JSON}" "${STAGE2_JSON}" <<'MERGEPY'
+import json
+import pathlib
+import sys
+
+stage1_path = pathlib.Path(sys.argv[1])
+stage2_path = pathlib.Path(sys.argv[2])
+
+
+def load(path):
+    return [
+        json.loads(line)
+        for line in path.read_text().splitlines()
+        if line.strip()
+    ]
+
+
+stage1 = load(stage1_path)
+stage2 = load(stage2_path)
+
+enrichment = {
+    (record["protocol"], record["port"]): record.get("service")
+    for record in stage2
+    if record.get("service") is not None
+}
+
+for record in stage1:
+    key = (record["protocol"], record["port"])
+
+    if key in enrichment:
+        record["service"] = enrichment[key]
+
+    print(json.dumps(record, sort_keys=True))
+MERGEPY
 
     exit 0
 fi

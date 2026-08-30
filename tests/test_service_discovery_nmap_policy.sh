@@ -91,9 +91,6 @@ cat <<'XML'
         <state state="open"/>
         <service name="ssh" method="probed" conf="10"/>
       </port>
-      <port protocol="tcp" portid="12345">
-        <state state="open"/>
-      </port>
     </ports>
   </host>
 </nmaprun>
