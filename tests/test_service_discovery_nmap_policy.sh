@@ -109,8 +109,8 @@ mkdir -p "${SUCCESS_STATE}"
 PATH="${FAKE_BIN}:${PATH}" \
 HLS_TEST_STATE_DIR="${SUCCESS_STATE}" \
 "${ENTRYPOINT}" \
-    "${ENTITY_ID}" \
-    "${ADDRESS}" \
+    --entity-id "${ENTITY_ID}" \
+    --address "${ADDRESS}" \
     > "${TMP_DIR}/success.jsonl"
 
 python3 - \
@@ -269,8 +269,8 @@ PATH="${FAKE_BIN}:${PATH}" \
 HLS_TEST_STATE_DIR="${FAIL_STATE}" \
 HLS_TEST_STAGE2_FAIL=1 \
 "${ENTRYPOINT}" \
-    "${ENTITY_ID}" \
-    "${ADDRESS}" \
+    --entity-id "${ENTITY_ID}" \
+    --address "${ADDRESS}" \
     > "${TMP_DIR}/failure.jsonl" \
     2> "${TMP_DIR}/failure.stderr"
 

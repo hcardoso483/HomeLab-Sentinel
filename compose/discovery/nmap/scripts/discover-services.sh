@@ -1,17 +1,42 @@
 #!/usr/bin/env bash
-
 set -euo pipefail
 
-ENTITY_ID="${1:-}"
-ADDRESS="${2:-}"
+ENTITY_ID=""
+ADDRESS=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --entity-id)
+            [[ $# -ge 2 ]] || {
+                echo "[ERROR] Missing value for --entity-id" >&2
+                exit 1
+            }
+            ENTITY_ID="$2"
+            shift 2
+            ;;
+        --address)
+            [[ $# -ge 2 ]] || {
+                echo "[ERROR] Missing value for --address" >&2
+                exit 1
+            }
+            ADDRESS="$2"
+            shift 2
+            ;;
+        *)
+            echo "[ERROR] Unknown argument: $1" >&2
+            echo "[ERROR] Usage: $0 --entity-id <entity-id> --address <address>" >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [[ -z "${ENTITY_ID}" || -z "${ADDRESS}" ]]; then
+    echo "[ERROR] Usage: $0 --entity-id <entity-id> --address <address>" >&2
+    exit 1
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NORMALIZER="${SCRIPT_DIR}/normalize-services.py"
-
-if [[ -z "${ENTITY_ID}" || -z "${ADDRESS}" ]]; then
-    echo "[ERROR] Usage: $0 <entity-id> <address>" >&2
-    exit 1
-fi
 
 if ! command -v nmap >/dev/null 2>&1; then
     echo "[ERROR] Required command not found: nmap" >&2

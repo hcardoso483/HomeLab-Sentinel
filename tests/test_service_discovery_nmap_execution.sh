@@ -71,8 +71,8 @@ chmod +x "${FAKE_BIN}/nmap"
 PATH="${FAKE_BIN}:${PATH}" \
 HLS_TEST_NMAP_ARGS="${ARGS}" \
 "${ENTRYPOINT}" \
-    "${ENTITY_ID}" \
-    "${ADDRESS}" \
+    --entity-id "${ENTITY_ID}" \
+    --address "${ADDRESS}" \
     > "${OUTPUT}"
 
 python3 - "${OUTPUT}" "${ENTITY_ID}" "${ADDRESS}" <<'PY'
