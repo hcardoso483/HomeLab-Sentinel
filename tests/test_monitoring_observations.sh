@@ -105,8 +105,8 @@ con = sqlite3.connect(sys.argv[1])
 print(con.execute("PRAGMA user_version").fetchone()[0])
 PY
 )"
-[[ "${VERSION}" == "3" ]] || fail "expected schema version 3, got ${VERSION}"
-pass "inventory schema version is v3"
+[[ "${VERSION}" == "4" ]] || fail "expected schema version 4, got ${VERSION}"
+pass "inventory schema version is v4"
 
 echo
 echo "=== RESULT ==="
