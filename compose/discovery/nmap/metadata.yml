@@ -25,6 +25,9 @@ dependencies:
         apt: nmap
       required: true
 
+entrypoints:
+  service-discovery: scripts/discover-services.sh
+
 capabilities:
   provides:
     - discovery
