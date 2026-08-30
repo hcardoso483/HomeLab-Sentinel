@@ -133,9 +133,11 @@ import sqlite3
 import sys
 
 with sqlite3.connect(sys.argv[1]) as con:
-    print(con.execute(
-        "SELECT COUNT(*) FROM service_observations"
-    ).fetchone()[0])
+    print(
+        con.execute(
+            "SELECT COUNT(*) FROM service_observations"
+        ).fetchone()[0]
+    )
 PY
 )"
 
@@ -143,19 +145,21 @@ PY
 pass "exact duplicate ingestion is idempotent"
 
 if printf '%s\n' \
-'{"schema_version":"1.0","entity_id":"dev-0123456789abcdef0123456789abcdef","provider":"nmap","observed_at":"2026-08-30T12:11:00Z","address":"192.168.1.58","protocol":"udp","port":53,"state":"open","service":"domain"}' \
+    '{"schema_version":"1.0","entity_id":"dev-0123456789abcdef0123456789abcdef","provider":"nmap","observed_at":"2026-08-30T12:11:00Z","address":"192.168.1.58","protocol":"udp","port":53,"state":"open","service":"domain"}' \
     | python3 "${STORE}" --database "${DB}" >/dev/null 2>&1
 then
     fail "invalid Service Discovery protocol was accepted"
 fi
+
 pass "invalid Service Discovery protocol rejected"
 
 if printf '%s\n' \
-'{"schema_version":"1.0","entity_id":"dev-ffffffffffffffffffffffffffffffff","provider":"nmap","observed_at":"2026-08-30T12:12:00Z","address":"192.168.1.59","protocol":"tcp","port":22,"state":"open","service":"ssh"}' \
+    '{"schema_version":"1.0","entity_id":"dev-ffffffffffffffffffffffffffffffff","provider":"nmap","observed_at":"2026-08-30T12:12:00Z","address":"192.168.1.59","protocol":"tcp","port":22,"state":"open","service":"ssh"}' \
     | python3 "${STORE}" --database "${DB}" >/dev/null 2>&1
 then
     fail "observation for unknown entity was accepted"
 fi
+
 pass "Service Discovery evidence requires canonical entity"
 
 if printf '%s\n' '{"not":"canonical"}' \
@@ -163,6 +167,7 @@ if printf '%s\n' '{"not":"canonical"}' \
 then
     fail "invalid Service Discovery observation was accepted"
 fi
+
 pass "invalid Service Discovery observation rejected"
 
 BEFORE="$(python3 - "${DB}" <<'PY'
@@ -170,9 +175,11 @@ import sqlite3
 import sys
 
 with sqlite3.connect(sys.argv[1]) as con:
-    print(con.execute(
-        "SELECT COUNT(*) FROM service_observations"
-    ).fetchone()[0])
+    print(
+        con.execute(
+            "SELECT COUNT(*) FROM service_observations"
+        ).fetchone()[0]
+    )
 PY
 )"
 
@@ -189,14 +196,17 @@ import sqlite3
 import sys
 
 with sqlite3.connect(sys.argv[1]) as con:
-    print(con.execute(
-        "SELECT COUNT(*) FROM service_observations"
-    ).fetchone()[0])
+    print(
+        con.execute(
+            "SELECT COUNT(*) FROM service_observations"
+        ).fetchone()[0]
+    )
 PY
 )"
 
 [[ "${AFTER}" == "${BEFORE}" ]] || \
     fail "failed observation batch left partial persisted evidence"
+
 pass "failed observation batch is atomic"
 
 VERSION="$(python3 - "${DB}" <<'PY'
@@ -208,8 +218,34 @@ with sqlite3.connect(sys.argv[1]) as con:
 PY
 )"
 
-[[ "${VERSION}" == "4" ]] || fail "expected schema version 4, got ${VERSION}"
-pass "inventory schema version is v4"
+[[ "${VERSION}" == "5" ]] || fail "expected schema version 5, got ${VERSION}"
+pass "inventory schema version is v5"
+
+python3 - "${DB}" <<'PY'
+import sqlite3
+import sys
+
+with sqlite3.connect(sys.argv[1]) as con:
+    assert con.execute(
+        """
+        SELECT 1
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name = 'service_discovery_runs'
+        """
+    ).fetchone()
+
+    assert con.execute(
+        """
+        SELECT 1
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name = 'service_discovery_run_observations'
+        """
+    ).fetchone()
+PY
+
+pass "Service Discovery run evidence tables are available"
 
 echo
 echo "=== RESULT ==="
