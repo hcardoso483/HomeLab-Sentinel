@@ -36,7 +36,7 @@ def normalize_service_name(port):
     return name
 
 
-def normalize_host(host, entity_id, target_address):
+def normalize_host(host, entity_id, target_address, suppress_services=False):
     status = host.find("status")
 
     if status is not None and status.get("state") != "up":
@@ -75,7 +75,11 @@ def normalize_host(host, entity_id, target_address):
                 "protocol": "tcp",
                 "port": port_number,
                 "state": "open",
-                "service": normalize_service_name(port),
+                "service": (
+                    None
+                    if suppress_services
+                    else normalize_service_name(port)
+                ),
             }
         )
 
@@ -97,6 +101,12 @@ def parse_args():
         "--address",
         required=True,
         help="Canonical Living Inventory target address",
+    )
+
+    parser.add_argument(
+        "--suppress-services",
+        action="store_true",
+        help="Emit endpoint evidence without service-identification labels",
     )
 
     return parser.parse_args()
@@ -122,6 +132,7 @@ def main():
                 host,
                 args.entity_id,
                 args.address,
+                suppress_services=args.suppress_services,
             )
         )
 
