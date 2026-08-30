@@ -4,6 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SERVICE_DISCOVERY="${APP_ROOT}/core/service_discovery/service_discovery.py"
+HLS="${APP_ROOT}/installer/hls"
 TMP_DIR="$(mktemp -d /tmp/hls-service-discovery-targets-test.XXXXXX)"
 DATABASE="${TMP_DIR}/inventory.db"
 
@@ -207,6 +208,14 @@ authorized_count="$(grep -c '^dev-' "${HUMAN}" || true)"
 [[ "${authorized_count}" -eq 3 ]] || fail "human output emitted unexpected target count"
 
 pass "human Service Discovery target output"
+
+HLS_JSON="${TMP_DIR}/hls.jsonl"
+"${HLS}" service-discovery targets --database "${DATABASE}" --json >"${HLS_JSON}"
+
+cmp -s "${DIRECT_JSON}" "${HLS_JSON}" ||
+    fail "hls service-discovery targets does not match Service Discovery Core"
+
+pass "hls service-discovery targets routes to Service Discovery Core"
 
 echo
 echo "=== RESULT ==="

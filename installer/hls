@@ -17,6 +17,7 @@ Usage:
   hls verify
   hls inventory [arguments...]
   hls monitoring [arguments...]
+  hls service-discovery [arguments...]
   hls help
 
 Commands:
@@ -25,6 +26,8 @@ Commands:
   verify      Run the complete Sentinel verification suite
   inventory   Query the Living Inventory
   monitoring  Query the Monitoring subsystem
+  service-discovery
+              Query the Service Discovery subsystem
   help        Show this help
 
 Install options:
@@ -290,6 +293,12 @@ command_monitoring() {
     exec "${monitoring}" "$@"
 }
 
+command_service_discovery() {
+    local service_discovery="${APP_ROOT}/core/service_discovery/service_discovery.py"
+    require_file "${service_discovery}"
+    exec "${service_discovery}" "$@"
+}
+
 main() {
     local command="${1:-help}"
     if (( $# > 0 )); then
@@ -302,6 +311,7 @@ main() {
         verify) command_verify "$@" ;;
         inventory) command_inventory "$@" ;;
         monitoring) command_monitoring "$@" ;;
+        service-discovery) command_service_discovery "$@" ;;
         help|-h|--help) usage ;;
         *)
             echo "[ERROR] Unknown command: ${command}" >&2
