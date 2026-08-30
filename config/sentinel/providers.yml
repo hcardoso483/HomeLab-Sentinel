@@ -10,3 +10,4 @@ providers:
   monitoring: prometheus
   dashboard: homepage
   discovery: nmap
+  service-discovery: nmap

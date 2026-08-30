@@ -28,6 +28,7 @@ dependencies:
 capabilities:
   provides:
     - discovery
+    - service-discovery
 
 tags:
   - discovery
