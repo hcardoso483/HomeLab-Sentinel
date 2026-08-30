@@ -9,6 +9,10 @@ if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
 from core.status import status as legacy
+from core.service_discovery import service_discovery as service_discovery_core
+from core.service_discovery.orchestrate import (
+    resolve_provider as resolve_service_discovery_provider,
+)
 
 
 STATUS_SCHEMA_VERSION = 1
@@ -71,6 +75,7 @@ def build_status(
         "core_api": {},
         "discovery": {},
         "inventory": {},
+        "service_discovery": {},
         "monitoring": {},
         "verification": {},
         "overall": "READY",
@@ -120,6 +125,11 @@ def build_status(
             "integrity": "N/A",
         }
 
+        payload["service_discovery"] = {
+            "readiness": "N/A",
+            "provider": "N/A",
+            "targets": None,
+        }
         payload["monitoring"] = {
             "scheduler": "N/A",
             "schedule": "N/A",
@@ -446,6 +456,33 @@ def build_status(
         else:
             payload["inventory"]["integrity"] = str(integrity)
             fail()
+
+    # ------------------------------------------------------------
+    # Service Discovery
+    # ------------------------------------------------------------
+
+    try:
+        service_discovery_provider = (
+            resolve_service_discovery_provider()
+        )
+        service_discovery_targets = (
+            service_discovery_core.service_discovery_targets(
+                legacy.DATABASE
+            )
+        )
+    except Exception:
+        payload["service_discovery"] = {
+            "readiness": "UNAVAILABLE",
+            "provider": "UNKNOWN",
+            "targets": None,
+        }
+        fail()
+    else:
+        payload["service_discovery"] = {
+            "readiness": "READY",
+            "provider": service_discovery_provider,
+            "targets": len(service_discovery_targets),
+        }
 
     # ------------------------------------------------------------
     # Monitoring

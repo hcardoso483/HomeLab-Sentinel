@@ -41,6 +41,24 @@
               label: Provider
               format: text
 
+- Service Discovery:
+    - Service Discovery Engine:
+        description: Sentinel service discovery readiness
+        widget:
+          type: customapi
+          url: http://172.18.0.1:18080/api/v1/status
+          refreshInterval: 10000
+          mappings:
+            - field: service_discovery.readiness
+              label: Readiness
+              format: text
+            - field: service_discovery.provider
+              label: Provider
+              format: text
+            - field: service_discovery.targets
+              label: Targets
+              format: number
+
 - Monitoring:
     - Monitoring Engine:
         description: Canonical Sentinel monitoring state

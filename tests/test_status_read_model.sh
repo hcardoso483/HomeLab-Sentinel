@@ -51,6 +51,7 @@ required_sections = (
     "core_api",
     "discovery",
     "inventory",
+    "service_discovery",
     "monitoring",
     "verification",
 )
@@ -67,6 +68,37 @@ if payload.get("overall") not in {
     "NOT INSTALLED",
 }:
     raise SystemExit("[FAIL] invalid overall status")
+
+service_discovery = payload["service_discovery"]
+
+if service_discovery.get("readiness") != "READY":
+    raise SystemExit(
+        "[FAIL] Service Discovery readiness is not READY: "
+        f"{service_discovery.get('readiness')!r}"
+    )
+
+provider = service_discovery.get("provider")
+if not isinstance(provider, str) or not provider:
+    raise SystemExit(
+        "[FAIL] Service Discovery provider is not a non-empty string"
+    )
+
+service_targets = service_discovery.get("targets")
+if (
+    not isinstance(service_targets, int)
+    or isinstance(service_targets, bool)
+    or service_targets < 0
+):
+    raise SystemExit(
+        "[FAIL] Service Discovery targets is not a non-negative integer"
+    )
+
+print(
+    "[PASS] Service Discovery="
+    f"{service_discovery['readiness']}, "
+    f"provider={provider}, "
+    f"targets={service_targets}"
+)
 
 monitoring = payload["monitoring"]
 
