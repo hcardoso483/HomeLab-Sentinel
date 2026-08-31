@@ -3,6 +3,7 @@ Description=HomeLab Sentinel Discovery Runtime
 After=local-fs.target network-online.target
 Wants=network-online.target
 ConditionPathExists=/opt/homelab-sentinel/app/scripts/with-inventory-lock.sh
+ConditionPathExists=/opt/homelab-sentinel/app/scripts/with-inventory-retry.sh
 ConditionPathExists=/opt/homelab-sentinel/app/core/discovery/runtime.sh
 ConditionPathExists=/srv/homelab-sentinel/sentinel/inventory.db
 
@@ -15,4 +16,4 @@ WorkingDirectory=/opt/homelab-sentinel/app
 AmbientCapabilities=CAP_NET_RAW
 CapabilityBoundingSet=CAP_NET_RAW
 
-ExecStart=/opt/homelab-sentinel/app/scripts/with-inventory-lock.sh /opt/homelab-sentinel/app/core/discovery/runtime.sh run
+ExecStart=/opt/homelab-sentinel/app/scripts/with-inventory-retry.sh /opt/homelab-sentinel/app/core/discovery/runtime.sh run
