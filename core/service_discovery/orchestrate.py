@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import json
 import subprocess
 import sys
 import uuid
@@ -12,8 +11,9 @@ APP_ROOT = Path("/opt/homelab-sentinel/app")
 DEFAULT_DATABASE = Path("/srv/homelab-sentinel/sentinel/inventory.db")
 
 PROVIDER_RESOLVER = APP_ROOT / "core" / "resolver" / "resolver.sh"
-PROVIDER_REGISTRY = APP_ROOT / "registry" / "providers.json"
+PROVIDER_REGISTRY = APP_ROOT / "registry" / "registry.sh"
 STORE = APP_ROOT / "core" / "service_discovery" / "store.py"
+ENTRYPOINT_ROLE = "service-discovery"
 
 
 def utc_now():
@@ -56,28 +56,24 @@ def resolve_provider():
 
 
 def resolve_entrypoint(provider):
-    try:
-        registry = json.loads(
-            PROVIDER_REGISTRY.read_text(encoding="utf-8")
-        )
-    except (OSError, json.JSONDecodeError) as exc:
-        raise RuntimeError(
-            f"unable to read provider registry: {exc}"
-        ) from exc
-
-    try:
-        entrypoint = registry["providers"][provider]["entrypoints"][
-            "service-discovery"
+    output = run_text(
+        [
+            str(PROVIDER_REGISTRY),
+            "entrypoint",
+            provider,
+            ENTRYPOINT_ROLE,
         ]
-    except (KeyError, TypeError) as exc:
-        raise RuntimeError(
-            f"provider {provider!r} has no service-discovery entrypoint"
-        ) from exc
+    ).strip()
 
-    path = Path(entrypoint)
+    if not output:
+        raise RuntimeError(
+            f"provider {provider!r} has no {ENTRYPOINT_ROLE} entrypoint"
+        )
+
+    path = Path(output.splitlines()[-1].strip())
 
     if not path.is_absolute():
-        path = APP_ROOT / entrypoint
+        path = APP_ROOT / path
 
     if not path.is_file():
         raise RuntimeError(
@@ -85,7 +81,6 @@ def resolve_entrypoint(provider):
         )
 
     return path
-
 
 def invoke_provider(entrypoint, entity_id, address):
     return run_text(
