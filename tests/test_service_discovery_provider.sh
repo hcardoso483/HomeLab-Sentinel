@@ -39,6 +39,19 @@ SERVICE_PROVIDER="$("${RESOLVER}" provider-id service-discovery)" ||
 
 pass "service-discovery capability resolves to nmap"
 
+python3 - <<'PYTEST'
+from core.service_discovery.orchestrate import resolve_provider
+
+provider = resolve_provider()
+
+if provider != "nmap":
+    raise SystemExit(
+        f"orchestrator resolved unexpected Service Discovery provider: {provider!r}"
+    )
+PYTEST
+
+pass "Service Discovery orchestrator uses the real canonical provider resolver"
+
 echo
 echo "=== RESULT ==="
 echo "HomeLab Sentinel Service Discovery provider regression PASSED"

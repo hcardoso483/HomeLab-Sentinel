@@ -11,7 +11,7 @@ from pathlib import Path
 APP_ROOT = Path("/opt/homelab-sentinel/app")
 DEFAULT_DATABASE = Path("/srv/homelab-sentinel/sentinel/inventory.db")
 
-PROVIDER_RESOLVER = APP_ROOT / "registry" / "resolve-provider.py"
+PROVIDER_RESOLVER = APP_ROOT / "core" / "resolver" / "resolver.sh"
 PROVIDER_REGISTRY = APP_ROOT / "registry" / "providers.json"
 STORE = APP_ROOT / "core" / "service_discovery" / "store.py"
 
@@ -41,8 +41,8 @@ def run_text(command, *, input_text=None):
 def resolve_provider():
     output = run_text(
         [
-            sys.executable,
             str(PROVIDER_RESOLVER),
+            "provider-id",
             "service-discovery",
         ]
     ).strip()
