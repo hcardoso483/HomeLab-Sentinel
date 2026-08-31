@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import argparse
+import os
+import signal
 import subprocess
 import sys
 import uuid
@@ -14,28 +16,39 @@ PROVIDER_RESOLVER = APP_ROOT / "core" / "resolver" / "resolver.sh"
 PROVIDER_REGISTRY = APP_ROOT / "registry" / "registry.sh"
 STORE = APP_ROOT / "core" / "service_discovery" / "store.py"
 ENTRYPOINT_ROLE = "service-discovery"
+PROVIDER_TIMEOUT_SECONDS = 600
 
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def run_text(command, *, input_text=None):
-    result = subprocess.run(
+def run_text(command, *, input_text=None, timeout=None):
+    process = subprocess.Popen(
         command,
-        input=input_text,
+        stdin=subprocess.PIPE if input_text is not None else None,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        capture_output=True,
-        check=False,
+        start_new_session=True,
     )
+    try:
+        stdout, stderr = process.communicate(input=input_text, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGTERM)
+        try:
+            process.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.communicate()
+        raise RuntimeError(f"command timed out after {timeout} seconds")
 
-    if result.returncode != 0:
-        message = result.stderr.strip() or result.stdout.strip()
+    if process.returncode != 0:
+        message = stderr.strip() or stdout.strip()
         raise RuntimeError(
-            message or f"command failed with exit code {result.returncode}"
+            message or f"command failed with exit code {process.returncode}"
         )
-
-    return result.stdout
+    return stdout
 
 
 def resolve_provider():
@@ -90,7 +103,8 @@ def invoke_provider(entrypoint, entity_id, address):
             entity_id,
             "--address",
             address,
-        ]
+        ],
+        timeout=PROVIDER_TIMEOUT_SECONDS,
     )
 
 

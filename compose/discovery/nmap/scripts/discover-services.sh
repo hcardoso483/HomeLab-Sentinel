@@ -66,6 +66,7 @@ nmap \
     -Pn \
     -sS \
     -p- \
+    --defeat-rst-ratelimit \
     -oX - \
     -- \
     "${ADDRESS}" \
