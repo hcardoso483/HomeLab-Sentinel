@@ -169,6 +169,51 @@ PY
 
 pass "target derivation failure aborts before any target execution"
 
+python3 - "${BATCH}" "${DATABASE}" <<'PY'
+import contextlib
+import importlib.util
+import io
+import sys
+from pathlib import Path
+
+batch_path = Path(sys.argv[1])
+database = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("service_discovery_batch_exit_contract", batch_path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+original_argv = list(sys.argv)
+
+def run_main(summary=None, error=None):
+    def fake_run_batch(database_path):
+        if error is not None:
+            raise RuntimeError(error)
+        return dict(summary)
+    module.run_batch = fake_run_batch
+    sys.argv = [str(batch_path), "--database", str(database), "--json"]
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            returncode = module.main()
+    finally:
+        sys.argv = original_argv
+    return returncode
+
+if run_main({"failed": 0, "succeeded": 3, "targets": 3}) != 0:
+    raise SystemExit("fully successful completed batch did not return 0")
+rc = run_main({"failed": 1, "succeeded": 2, "targets": 3})
+if rc != 0:
+    raise SystemExit(f"completed batch with target-level failures returned {rc}, expected 0")
+if run_main({"failed": 0, "succeeded": 0, "targets": 0}) != 0:
+    raise SystemExit("successful zero-target batch did not return 0")
+if run_main(error="fixture target derivation failed") != 1:
+    raise SystemExit("batch-level RuntimeError did not return 1")
+PY
+
+pass "completed batch exit status is independent of target-level failures"
+pass "batch-level infrastructure failure still returns nonzero"
+
 echo
+
 echo "=== RESULT ==="
 echo "HomeLab Sentinel Service Discovery batch regression PASSED"

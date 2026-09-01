@@ -178,7 +178,7 @@ def main():
         return 1
 
     emit_json(summary) if args.json else emit_human(summary)
-    return 1 if summary["failed"] else 0
+    return 0
 
 
 if __name__ == "__main__":
