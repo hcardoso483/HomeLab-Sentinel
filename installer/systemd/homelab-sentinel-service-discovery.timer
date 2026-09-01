@@ -2,9 +2,9 @@
 Description=Run HomeLab Sentinel Service Discovery periodically
 
 [Timer]
-OnBootSec=10min
-OnUnitActiveSec=30min
-AccuracySec=1min
+OnBootSec=20min
+OnUnitInactiveSec=6h
+AccuracySec=5min
 Persistent=true
 Unit=homelab-sentinel-service-discovery.service
 

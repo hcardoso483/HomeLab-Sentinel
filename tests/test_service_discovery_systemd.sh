@@ -76,12 +76,12 @@ pass "Service Discovery service retains basic systemd hardening"
 
 grep -Fqx "Unit=homelab-sentinel-service-discovery.service" "${TIMER}" \
     || fail "Service Discovery timer does not activate the canonical service"
-grep -Fqx "OnBootSec=10min" "${TIMER}" \
-    || fail "Service Discovery timer does not use the expected conservative boot delay"
-grep -Fqx "OnUnitActiveSec=30min" "${TIMER}" \
-    || fail "Service Discovery timer does not use the expected 30 minute cadence"
-grep -Fqx "AccuracySec=1min" "${TIMER}" \
-    || fail "Service Discovery timer does not use the expected accuracy window"
+grep -Fqx "OnBootSec=20min" "${TIMER}" \
+    || fail "Service Discovery timer does not use the expected 20 minute boot delay"
+grep -Fqx "OnUnitInactiveSec=6h" "${TIMER}" \
+    || fail "Service Discovery timer does not use the expected 6 hour post-completion cadence"
+grep -Fqx "AccuracySec=5min" "${TIMER}" \
+    || fail "Service Discovery timer does not use the expected 5 minute accuracy window"
 grep -Fqx "Persistent=true" "${TIMER}" \
     || fail "Service Discovery timer is not persistent"
 pass "Service Discovery timer uses the conservative v1 schedule"
