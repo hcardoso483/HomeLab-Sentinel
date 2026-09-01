@@ -1,0 +1,19 @@
+[Unit]
+Description=HomeLab Sentinel Service Discovery Retry Pool
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/opt/homelab-sentinel/app/scripts/with-inventory-lock.sh
+ConditionPathExists=/opt/homelab-sentinel/app/scripts/with-inventory-retry.sh
+ConditionPathExists=/opt/homelab-sentinel/app/core/service_discovery/retry.py
+ConditionPathExists=/srv/homelab-sentinel/sentinel/inventory.db
+
+[Service]
+Type=oneshot
+User=homelab-sentinel
+Group=homelab-sentinel
+WorkingDirectory=/opt/homelab-sentinel/app
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+NoNewPrivileges=true
+PrivateTmp=true
+ExecStart=/opt/homelab-sentinel/app/scripts/with-inventory-retry.sh /opt/homelab-sentinel/app/core/service_discovery/retry.py --database /srv/homelab-sentinel/sentinel/inventory.db --json

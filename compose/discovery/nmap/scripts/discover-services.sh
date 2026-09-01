@@ -3,6 +3,7 @@ set -euo pipefail
 
 ENTITY_ID=""
 ADDRESS=""
+SCAN_BUDGET_SECONDS="600"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -22,16 +23,29 @@ while [[ $# -gt 0 ]]; do
             ADDRESS="$2"
             shift 2
             ;;
+        --scan-budget-seconds)
+            [[ $# -ge 2 ]] || {
+                echo "[ERROR] Missing value for --scan-budget-seconds" >&2
+                exit 1
+            }
+            SCAN_BUDGET_SECONDS="$2"
+            shift 2
+            ;;
         *)
             echo "[ERROR] Unknown argument: $1" >&2
-            echo "[ERROR] Usage: $0 --entity-id <entity-id> --address <address>" >&2
+            echo "[ERROR] Usage: $0 --entity-id <entity-id> --address <address> [--scan-budget-seconds <seconds>]" >&2
             exit 1
             ;;
     esac
 done
 
 if [[ -z "${ENTITY_ID}" || -z "${ADDRESS}" ]]; then
-    echo "[ERROR] Usage: $0 --entity-id <entity-id> --address <address>" >&2
+    echo "[ERROR] Usage: $0 --entity-id <entity-id> --address <address> [--scan-budget-seconds <seconds>]" >&2
+    exit 1
+fi
+
+if [[ ! "${SCAN_BUDGET_SECONDS}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "[ERROR] --scan-budget-seconds must be a positive integer" >&2
     exit 1
 fi
 
@@ -56,10 +70,53 @@ STAGE2_XML="${TMP_DIR}/stage2.xml"
 STAGE1_JSON="${TMP_DIR}/stage1.jsonl"
 STAGE2_JSON="${TMP_DIR}/stage2.jsonl"
 
+ATTEMPT_STARTED_SECONDS="${SECONDS}"
+
+remaining_budget_seconds() {
+    local elapsed
+    local remaining
+
+    elapsed=$((SECONDS - ATTEMPT_STARTED_SECONDS))
+    remaining=$((SCAN_BUDGET_SECONDS - elapsed))
+
+    if (( remaining <= 0 )); then
+        printf '0\n'
+    else
+        printf '%s\n' "${remaining}"
+    fi
+}
+
+xml_host_timed_out() {
+    python3 - "$1" <<'PYXML'
+import sys
+import xml.etree.ElementTree as ET
+
+try:
+    root = ET.parse(sys.argv[1]).getroot()
+except (ET.ParseError, OSError):
+    raise SystemExit(1)
+
+for host in root.findall("host"):
+    if host.get("timedout", "").lower() == "true":
+        raise SystemExit(0)
+
+raise SystemExit(1)
+PYXML
+}
+
 #
 # Stage 1:
 # Discover every open TCP endpoint.
 #
+STAGE1_REMAINING="$(remaining_budget_seconds)"
+
+if (( STAGE1_REMAINING <= 0 )); then
+    echo "[WARN] Nmap endpoint discovery exhausted the attempt budget for ${ADDRESS}." >&2
+    exit 75
+fi
+
+STAGE1_HOST_TIMEOUT="${STAGE1_REMAINING}s"
+
 nmap \
     --privileged \
     -n \
@@ -67,10 +124,16 @@ nmap \
     -sS \
     -p- \
     --defeat-rst-ratelimit \
+    --host-timeout "${STAGE1_HOST_TIMEOUT}" \
     -oX - \
     -- \
     "${ADDRESS}" \
     > "${STAGE1_XML}"
+
+if xml_host_timed_out "${STAGE1_XML}"; then
+    echo "[WARN] Nmap endpoint discovery exhausted the attempt budget for ${ADDRESS}." >&2
+    exit 75
+fi
 
 #
 # Derive the exact set of open TCP ports from Stage 1 evidence.
@@ -135,19 +198,28 @@ fi
 # Perform lightweight service identification only against ports
 # that Stage 1 actually observed open.
 #
-if nmap \
+STAGE2_REMAINING="$(remaining_budget_seconds)"
+
+if (( STAGE2_REMAINING > 0 )); then
+    STAGE2_HOST_TIMEOUT="${STAGE2_REMAINING}s"
+
+    if nmap \
     --privileged \
     -n \
     -Pn \
     -sS \
     -sV \
-    --version-light \
-    -p "${OPEN_PORTS}" \
-    -oX - \
+        --version-light \
+        -p "${OPEN_PORTS}" \
+        --host-timeout "${STAGE2_HOST_TIMEOUT}" \
+        -oX - \
     -- \
     "${ADDRESS}" \
     > "${STAGE2_XML}"
 then
+        if xml_host_timed_out "${STAGE2_XML}"; then
+            echo "[WARN] Nmap service identification exhausted the remaining attempt budget for ${ADDRESS}; preserving Stage 1 endpoint evidence." >&2
+        else
     #
     # Stage 1 remains authoritative for endpoint existence.
     # Stage 2 may enrich matching endpoints with trusted service identity,
@@ -201,7 +273,9 @@ for record in stage1:
     print(json.dumps(record, sort_keys=True))
 MERGEPY
 
-    exit 0
+            exit 0
+        fi
+    fi
 fi
 
 #

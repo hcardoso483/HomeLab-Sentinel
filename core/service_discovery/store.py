@@ -23,6 +23,7 @@ MIGRATIONS_DIR = APP_ROOT / "core" / "inventory" / "migrations"
 
 RUN_OUTCOMES = {
     "success",
+    "inconclusive",
     "provider_error",
     "invalid_evidence",
     "store_error",

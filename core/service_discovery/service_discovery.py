@@ -99,6 +99,34 @@ def service_discovery_targets(database):
     return sorted(targets, key=lambda item: (item["entity_id"], item["address"]))
 
 
+def service_discovery_retry_pool(connection, targets):
+    pooled = []
+
+    for target in targets:
+        entity_id = target["entity_id"]
+        address = target["address"]
+
+        row = connection.execute(
+            """
+            SELECT outcome
+            FROM service_discovery_runs
+            WHERE entity_id = ?
+              AND address = ?
+            ORDER BY completed_at DESC, service_discovery_run_id DESC
+            LIMIT 1
+            """,
+            (entity_id, address),
+        ).fetchone()
+
+        if row is not None and row[0] == "inconclusive":
+            pooled.append(target)
+
+    return sorted(
+        pooled,
+        key=lambda item: (item["entity_id"], item["address"]),
+    )
+
+
 def emit_json(records):
     try:
         for record in records:
@@ -539,6 +567,12 @@ def build_parser():
         help="Emit JSON lines",
     )
 
+    targets.add_argument(
+        "--exclude-retry-pool",
+        action="store_true",
+        help="Exclude targets whose latest Service Discovery run is inconclusive",
+    )
+
     status = subparsers.add_parser(
         "status",
         help="Show canonical Service Discovery subsystem summary",
@@ -602,6 +636,26 @@ def main():
     try:
         if args.command == "targets":
             targets = service_discovery_targets(args.database)
+
+            if args.exclude_retry_pool:
+                conn = connect_read_only(args.database)
+                try:
+                    require_schema(conn)
+                    retry_pool = service_discovery_retry_pool(conn, targets)
+                finally:
+                    conn.close()
+
+                retry_keys = {
+                    (target["entity_id"], target["address"])
+                    for target in retry_pool
+                }
+
+                targets = [
+                    target
+                    for target in targets
+                    if (target["entity_id"], target["address"]) not in retry_keys
+                ]
+
             if args.json:
                 emit_json(targets)
             else:

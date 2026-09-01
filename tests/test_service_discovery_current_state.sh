@@ -42,10 +42,11 @@ CREATE TABLE entities (
 entity = "dev-" + ("a" * 32)
 conn.execute("INSERT INTO entities(entity_id) VALUES (?)", (entity,))
 
-# Apply production migrations 004 and 005 exactly as shipped.
+# Apply production migrations 004 through 006 exactly as shipped.
 for name in (
     "004_service_observations.sql",
     "005_service_discovery_runs.sql",
+    "006_service_discovery_run_outcomes.sql",
 ):
     sql = (root / "core" / "inventory" / "migrations" / name).read_text()
     conn.executescript(sql)
@@ -212,6 +213,55 @@ if "agent dvr" in json.dumps(row).lower():
 PY
 pass "successful endpoint is OBSERVED and non-default HTTP remains evidence, not an application guess"
 
+# #18.4: inconclusive is non-authoritative. It may be the latest inspection,
+# but it must not turn previously observed endpoint evidence STALE.
+python3 - <<'PY'
+import os, sqlite3
+
+db = os.environ["DB"]
+entity = "dev-" + ("a" * 32)
+conn = sqlite3.connect(db)
+conn.execute("PRAGMA foreign_keys = ON")
+conn.execute(
+    """
+    INSERT INTO service_discovery_runs(
+        service_discovery_run_id, entity_id, address, provider,
+        started_at, completed_at, outcome, detail
+    ) VALUES (?, ?, ?, 'nmap', ?, ?, 'inconclusive', ?)
+    """,
+    (
+        "run-10000000000000000000000000000001",
+        entity,
+        "192.0.2.10",
+        "2026-08-30T10:05:00+00:00",
+        "2026-08-30T10:05:10+00:00",
+        "bounded probing exhausted without authoritative conclusion",
+    ),
+)
+conn.commit()
+conn.close()
+PY
+
+OUT_INCONCLUSIVE_OBSERVED="$(query_current)" || fail "read model failed after inconclusive inspection of observed endpoint"
+export OUT_INCONCLUSIVE_OBSERVED
+python3 - <<'PY'
+import json, os, sys
+
+rows = json.loads(os.environ["OUT_INCONCLUSIVE_OBSERVED"])
+if len(rows) != 1:
+    sys.exit(f"historical endpoint disappeared after inconclusive inspection: {rows!r}")
+row = rows[0]
+if row.get("endpoint_state") != "OBSERVED":
+    sys.exit(f"inconclusive inspection incorrectly changed OBSERVED endpoint: {row!r}")
+inspection = row.get("latest_inspection", {})
+if inspection.get("outcome") != "inconclusive":
+    sys.exit(f"inconclusive inspection not exposed separately: {inspection!r}")
+if inspection.get("completed_at") != "2026-08-30T10:05:10+00:00":
+    sys.exit(f"wrong latest inconclusive inspection timestamp: {inspection!r}")
+PY
+
+pass "inconclusive inspection preserves OBSERVED endpoint evidence while remaining latest inspection"
+
 python3 - <<'PY'
 import os, sqlite3
 
@@ -257,6 +307,55 @@ if inspection.get("completed_at") != "2026-08-30T10:15:10+00:00":
     sys.exit(f"expected latest empty successful inspection, got {inspection!r}")
 PY
 pass "later successful empty inspection makes historical endpoint STALE without deleting it"
+
+# #18.4: inconclusive also cannot revive or further weaken already-STALE
+# evidence. It changes inspection history only.
+python3 - <<'PY'
+import os, sqlite3
+
+db = os.environ["DB"]
+entity = "dev-" + ("a" * 32)
+conn = sqlite3.connect(db)
+conn.execute("PRAGMA foreign_keys = ON")
+conn.execute(
+    """
+    INSERT INTO service_discovery_runs(
+        service_discovery_run_id, entity_id, address, provider,
+        started_at, completed_at, outcome, detail
+    ) VALUES (?, ?, ?, 'nmap', ?, ?, 'inconclusive', ?)
+    """,
+    (
+        "run-10000000000000000000000000000002",
+        entity,
+        "192.0.2.10",
+        "2026-08-30T10:20:00+00:00",
+        "2026-08-30T10:20:10+00:00",
+        "bounded probing exhausted without authoritative conclusion",
+    ),
+)
+conn.commit()
+conn.close()
+PY
+
+OUT_INCONCLUSIVE_STALE="$(query_current)" || fail "read model failed after inconclusive inspection of stale endpoint"
+export OUT_INCONCLUSIVE_STALE
+python3 - <<'PY'
+import json, os, sys
+
+rows = json.loads(os.environ["OUT_INCONCLUSIVE_STALE"])
+if len(rows) != 1:
+    sys.exit(f"stale endpoint disappeared after inconclusive inspection: {rows!r}")
+row = rows[0]
+if row.get("endpoint_state") != "STALE":
+    sys.exit(f"inconclusive inspection incorrectly changed STALE endpoint: {row!r}")
+inspection = row.get("latest_inspection", {})
+if inspection.get("outcome") != "inconclusive":
+    sys.exit(f"latest inspection should be inconclusive: {inspection!r}")
+if inspection.get("completed_at") != "2026-08-30T10:20:10+00:00":
+    sys.exit(f"wrong stale/inconclusive inspection timestamp: {inspection!r}")
+PY
+
+pass "inconclusive inspection preserves STALE endpoint evidence while remaining latest inspection"
 
 python3 - <<'PY'
 import os, sqlite3
@@ -540,7 +639,24 @@ python3 - <<'PY'
 import os, sqlite3
 db = os.environ["DB"]
 conn = sqlite3.connect(db)
-conn.execute("INSERT INTO entities(entity_id) VALUES (?)", ("dev-" + ("b" * 32),))
+entity = "dev-" + ("b" * 32)
+conn.execute("INSERT INTO entities(entity_id) VALUES (?)", (entity,))
+conn.execute(
+    """
+    INSERT INTO service_discovery_runs(
+        service_discovery_run_id, entity_id, address, provider,
+        started_at, completed_at, outcome, detail
+    ) VALUES (?, ?, ?, 'nmap', ?, ?, 'inconclusive', ?)
+    """,
+    (
+        "run-10000000000000000000000000000003",
+        entity,
+        "192.0.2.20",
+        "2026-08-30T11:15:00+00:00",
+        "2026-08-30T11:15:10+00:00",
+        "bounded probing exhausted without authoritative conclusion",
+    ),
+)
 conn.commit()
 conn.close()
 PY
@@ -554,7 +670,7 @@ rows = json.loads(os.environ["OUT5"])
 if rows != []:
     sys.exit(f"read model invented endpoints for entity with no history: {rows!r}")
 PY
-pass "entity with no service history has no invented endpoints"
+pass "entity with only inconclusive inspection history has no invented endpoints"
 
 python3 - <<'PY'
 import os, sqlite3, sys
@@ -569,8 +685,8 @@ conn.close()
 
 if obs != 4:
     sys.exit(f"expected 4 deduplicated observations, got {obs}")
-if runs != 5:
-    sys.exit(f"expected 5 runs, got {runs}")
+if runs != 8:
+    sys.exit(f"expected 8 runs, got {runs}")
 if links != 5:
     sys.exit(f"expected 5 run-observation associations, got {links}")
 if integrity != "ok":

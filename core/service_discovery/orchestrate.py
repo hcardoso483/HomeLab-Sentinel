@@ -19,6 +19,34 @@ ENTRYPOINT_ROLE = "service-discovery"
 PROVIDER_TIMEOUT_SECONDS = 600
 
 
+class CommandError(RuntimeError):
+    """Command exited unsuccessfully and preserved its process return code."""
+
+    def __init__(self, returncode, message):
+        super().__init__(message)
+        self.returncode = returncode
+
+
+class ProviderInconclusive(RuntimeError):
+    """Provider exhausted bounded probing without an authoritative conclusion."""
+
+
+def positive_integer(value):
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "must be a positive integer"
+        ) from exc
+
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError(
+            "must be a positive integer"
+        )
+
+    return parsed
+
+
 def utc_now():
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -45,8 +73,9 @@ def run_text(command, *, input_text=None, timeout=None):
 
     if process.returncode != 0:
         message = stderr.strip() or stdout.strip()
-        raise RuntimeError(
-            message or f"command failed with exit code {process.returncode}"
+        raise CommandError(
+            process.returncode,
+            message or f"command failed with exit code {process.returncode}",
         )
     return stdout
 
@@ -95,17 +124,32 @@ def resolve_entrypoint(provider):
 
     return path
 
-def invoke_provider(entrypoint, entity_id, address):
-    return run_text(
-        [
-            str(entrypoint),
-            "--entity-id",
-            entity_id,
-            "--address",
-            address,
-        ],
-        timeout=PROVIDER_TIMEOUT_SECONDS,
-    )
+def invoke_provider(entrypoint, entity_id, address, scan_budget_seconds=None):
+    command = [
+        str(entrypoint),
+        "--entity-id",
+        entity_id,
+        "--address",
+        address,
+    ]
+
+    if scan_budget_seconds is not None:
+        command.extend(
+            [
+                "--scan-budget-seconds",
+                str(scan_budget_seconds),
+            ]
+        )
+
+    try:
+        return run_text(
+            command,
+            timeout=PROVIDER_TIMEOUT_SECONDS,
+        )
+    except CommandError as exc:
+        if exc.returncode == 75:
+            raise ProviderInconclusive(str(exc)) from exc
+        raise
 
 
 def persist_observations(
@@ -191,6 +235,13 @@ def build_parser():
         help=f"SQLite database path (default: {DEFAULT_DATABASE})",
     )
 
+    parser.add_argument(
+        "--scan-budget-seconds",
+        type=positive_integer,
+        default=None,
+        help="Total bounded provider scan budget in seconds",
+    )
+
     return parser
 
 
@@ -219,7 +270,35 @@ def main():
             entrypoint,
             args.entity_id,
             args.address,
+            args.scan_budget_seconds,
         )
+
+    except ProviderInconclusive as exc:
+        completed_at = utc_now()
+
+        try:
+            persist_observations(
+                args.database,
+                "",
+                run_id=run_id,
+                entity_id=args.entity_id,
+                address=args.address,
+                provider=provider,
+                started_at=started_at,
+                completed_at=completed_at,
+                outcome="inconclusive",
+                detail=str(exc),
+            )
+        except RuntimeError as persistence_exc:
+            print(
+                f"[ERROR] {exc}; additionally failed to persist "
+                f"inconclusive run: {persistence_exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+        print(f"[WARN] {exc}", file=sys.stderr)
+        return 75
 
     except RuntimeError as exc:
         completed_at = utc_now()

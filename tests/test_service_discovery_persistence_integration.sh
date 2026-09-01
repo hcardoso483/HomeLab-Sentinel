@@ -118,7 +118,7 @@ provider_output = "\n".join([
 module.resolve_provider = lambda: "fixture-provider"
 module.resolve_entrypoint = lambda provider: Path("/fixture/discover-services")
 module.invoke_provider = (
-    lambda entrypoint, supplied_entity_id, supplied_address: provider_output
+    lambda entrypoint, supplied_entity_id, supplied_address, scan_budget_seconds=None: provider_output
 )
 
 sys.argv = [
@@ -231,7 +231,7 @@ provider_output = "\n".join([
 module.resolve_provider = lambda: "fixture-provider"
 module.resolve_entrypoint = lambda provider: Path("/fixture/discover-services")
 module.invoke_provider = (
-    lambda entrypoint, supplied_entity_id, supplied_address: provider_output
+    lambda entrypoint, supplied_entity_id, supplied_address, scan_budget_seconds=None: provider_output
 )
 
 sys.argv = [
@@ -293,7 +293,7 @@ connection.close()
 module.resolve_provider = lambda: "fixture-provider"
 module.resolve_entrypoint = lambda provider: Path("/fixture/discover-services")
 module.invoke_provider = (
-    lambda entrypoint, supplied_entity_id, supplied_address: ""
+    lambda entrypoint, supplied_entity_id, supplied_address, scan_budget_seconds=None: ""
 )
 
 sys.argv = [

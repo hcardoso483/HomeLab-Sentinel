@@ -39,6 +39,16 @@ if not re.search(r'(?m)^\s*if\s+nmap\s*\\', stage2):
 if not re.search(r'(?m)^\s*-p-\s*\\', stage1):
     raise SystemExit("[FAIL] Stage 1 no longer scans the full TCP port range")
 print("[PASS] Stage 1 retains full-range TCP endpoint discovery")
+if not re.search(
+    r'(?m)^\s*--host-timeout\s+"\$\{[^}]+\}"\s*\\',
+    stage1,
+):
+    raise SystemExit(
+        "[FAIL] Stage 1 host timeout is not driven by the provider attempt budget"
+    )
+
+print("[PASS] Stage 1 host timeout is driven by the provider attempt budget")
+
 
 if "--defeat-rst-ratelimit" not in stage1:
     raise SystemExit("[FAIL] Stage 1 lacks --defeat-rst-ratelimit")
@@ -54,6 +64,17 @@ if not re.search(r'(?m)^\s*--version-light\s*\\', stage2):
     raise SystemExit("[FAIL] Stage 2 no longer uses version-light")
 if not re.search(r'(?m)^\s*-p\s+"\$\{OPEN_PORTS\}"\s*\\', stage2):
     raise SystemExit("[FAIL] Stage 2 no longer probes only Stage 1 open ports")
+
+if not re.search(
+    r'(?m)^\s*--host-timeout\s+"\$\{[^}]+\}"\s*\\',
+    stage2,
+):
+    raise SystemExit(
+        "[FAIL] Stage 2 host timeout is not driven by remaining attempt budget"
+    )
+
+print("[PASS] Stage 2 host timeout is driven by remaining attempt budget")
+
 print("[PASS] Stage 2 retains version-light probing of Stage 1 open ports")
 PY
 

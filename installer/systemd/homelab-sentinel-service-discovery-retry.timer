@@ -1,0 +1,12 @@
+[Unit]
+Description=Run HomeLab Sentinel Service Discovery Retry Pool periodically
+
+[Timer]
+OnBootSec=25min
+OnUnitInactiveSec=15min
+AccuracySec=1min
+Persistent=true
+Unit=homelab-sentinel-service-discovery-retry.service
+
+[Install]
+WantedBy=timers.target

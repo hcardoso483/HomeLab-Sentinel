@@ -33,6 +33,7 @@ def load_targets(database):
             "--database",
             str(database),
             "--json",
+            "--exclude-retry-pool",
         ]
     )
     if result.returncode != 0:
@@ -82,28 +83,37 @@ def load_targets(database):
 
 
 def run_target(database, entity_id, address):
-    result = run_text(
-        [
-            str(ORCHESTRATOR),
-            "--entity-id",
-            entity_id,
-            "--address",
-            address,
-            "--database",
-            str(database),
-        ]
-    )
+    scan_budgets = (60, 180, 300)
 
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
-        if detail:
-            print(
-                f"[ERROR] Service Discovery target {entity_id} "
-                f"{address}: {detail}",
-                file=sys.stderr,
-            )
+    for scan_budget_seconds in scan_budgets:
+        result = run_text(
+            [
+                str(ORCHESTRATOR),
+                "--entity-id",
+                entity_id,
+                "--address",
+                address,
+                "--database",
+                str(database),
+                "--scan-budget-seconds",
+                str(scan_budget_seconds),
+            ]
+        )
 
-    return result.returncode
+        if result.returncode == 0:
+            return 0
+
+        if result.returncode != 75:
+            detail = result.stderr.strip() or result.stdout.strip()
+            if detail:
+                print(
+                    f"[ERROR] Service Discovery target {entity_id} "
+                    f"{address}: {detail}",
+                    file=sys.stderr,
+                )
+            return result.returncode
+
+    return 75
 
 
 def run_batch(database):
@@ -114,6 +124,7 @@ def run_batch(database):
 
     summary = {
         "failed": 0,
+        "inconclusive": 0,
         "succeeded": 0,
         "targets": len(targets),
     }
@@ -126,6 +137,8 @@ def run_batch(database):
         )
         if returncode == 0:
             summary["succeeded"] += 1
+        elif returncode == 75:
+            summary["inconclusive"] += 1
         else:
             summary["failed"] += 1
 

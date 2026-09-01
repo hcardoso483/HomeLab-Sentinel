@@ -187,7 +187,7 @@ summary = b.run_batch(db)
 
 if calls != [("dev-a", "192.0.2.10"), ("dev-b", "192.0.2.20")]:
     raise SystemExit(f"[FAIL] batch did not continue after bounded failure: {calls!r}")
-if summary != {"failed": 1, "succeeded": 1, "targets": 2}:
+if summary != {"failed": 1, "inconclusive": 0, "succeeded": 1, "targets": 2}:
     raise SystemExit(f"[FAIL] unexpected batch summary: {summary!r}")
 
 print("[PASS] timed-out provider invocation is bounded")

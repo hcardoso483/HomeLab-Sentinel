@@ -218,8 +218,8 @@ with sqlite3.connect(sys.argv[1]) as con:
 PY
 )"
 
-[[ "${VERSION}" == "5" ]] || fail "expected schema version 5, got ${VERSION}"
-pass "inventory schema version is v5"
+[[ "${VERSION}" == "6" ]] || fail "expected schema version 6, got ${VERSION}"
+pass "inventory schema version is v6"
 
 python3 - "${DB}" <<'PY'
 import sqlite3
