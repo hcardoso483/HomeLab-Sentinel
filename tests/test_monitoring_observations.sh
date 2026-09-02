@@ -105,8 +105,23 @@ con = sqlite3.connect(sys.argv[1])
 print(con.execute("PRAGMA user_version").fetchone()[0])
 PY
 )"
-[[ "${VERSION}" == "4" ]] || fail "expected schema version 4, got ${VERSION}"
-pass "inventory schema version is v4"
+
+EXPECTED_VERSION="$(
+    find "${APP_ROOT}/core/inventory/migrations" \
+        -maxdepth 1 \
+        -type f \
+        -name '[0-9][0-9][0-9]_*.sql' \
+        -printf '%f\n' \
+    | sort \
+    | tail -n 1 \
+    | cut -d_ -f1 \
+    | sed 's/^0*//'
+)"
+
+[[ "${VERSION}" == "${EXPECTED_VERSION}" ]] || \
+    fail "expected schema version ${EXPECTED_VERSION}, got ${VERSION}"
+
+pass "inventory schema version is v${VERSION}"
 
 echo
 echo "=== RESULT ==="

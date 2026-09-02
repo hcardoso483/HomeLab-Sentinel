@@ -16,6 +16,8 @@ CURRENT = APP_ROOT / "core" / "service_discovery" / "current.py"
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
+from core.service_discovery.current import derive_current_services
+
 
 def load_inventory_records(database):
     if not INVENTORY.is_file():
@@ -125,6 +127,87 @@ def service_discovery_retry_pool(connection, targets):
         pooled,
         key=lambda item: (item["entity_id"], item["address"]),
     )
+
+
+def service_discovery_results(database):
+    """Return canonical current Service Discovery results grouped by target."""
+
+    targets = service_discovery_targets(database)
+
+    conn = connect_read_only(database)
+    try:
+        require_schema(conn)
+
+        entity_endpoints = {}
+        for entity_id in sorted(
+            {target["entity_id"] for target in targets}
+        ):
+            entity_endpoints[entity_id] = derive_current_services(
+                conn,
+                entity_id,
+            )
+
+        items = []
+
+        for target in targets:
+            entity_id = target["entity_id"]
+            address = target["address"]
+
+            endpoints = [
+                record
+                for record in entity_endpoints.get(entity_id, [])
+                if record.get("address") == address
+            ]
+
+            observed = sum(
+                1
+                for record in endpoints
+                if record.get("endpoint_state") == "OBSERVED"
+            )
+            stale = sum(
+                1
+                for record in endpoints
+                if record.get("endpoint_state") == "STALE"
+            )
+
+            latest_row = conn.execute(
+                """
+                SELECT outcome, completed_at
+                FROM service_discovery_runs
+                WHERE entity_id = ?
+                  AND address = ?
+                ORDER BY completed_at DESC,
+                         service_discovery_run_id DESC
+                LIMIT 1
+                """,
+                (entity_id, address),
+            ).fetchone()
+
+            latest_inspection = None
+            if latest_row is not None:
+                latest_inspection = {
+                    "outcome": latest_row["outcome"],
+                    "completed_at": latest_row["completed_at"],
+                }
+
+            items.append(
+                {
+                    "entity_id": entity_id,
+                    "entity_type": target["entity_type"],
+                    "address": address,
+                    "observed": observed,
+                    "stale": stale,
+                    "latest_inspection": latest_inspection,
+                    "endpoints": endpoints,
+                }
+            )
+
+        return {
+            "targets": len(targets),
+            "items": items,
+        }
+    finally:
+        conn.close()
 
 
 def emit_json(records):

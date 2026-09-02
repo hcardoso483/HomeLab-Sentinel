@@ -20,6 +20,7 @@ from core.inventory.inventory import (
     unresolved_records,
 )
 from core.status.read_model import build_status
+from core.service_discovery.service_discovery import service_discovery_results
 
 
 def json_bytes(payload):
@@ -68,6 +69,13 @@ class CoreAPIHandler(BaseHTTPRequestHandler):
             if path == "/api/v1/status":
                 payload = build_status(
                     api_health_probe=lambda: True,
+                )
+                self.send_json(200, payload)
+                return
+
+            if path == "/api/v1/service-discovery":
+                payload = service_discovery_results(
+                    self.database_path
                 )
                 self.send_json(200, payload)
                 return

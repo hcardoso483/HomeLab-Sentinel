@@ -176,6 +176,91 @@ PY_STATUS
 
 pass "GET /api/v1/status"
 
+SERVICE_DISCOVERY="${TMP_DIR}/service-discovery.json"
+
+STATUS="$(
+    http_request \
+        GET \
+        "${BASE_URL}/api/v1/service-discovery" \
+        "${SERVICE_DISCOVERY}"
+)"
+
+[[ "${STATUS}" == "200" ]] \
+    || fail "Service Discovery endpoint returned HTTP ${STATUS}"
+
+python3 - "${SERVICE_DISCOVERY}" <<'PY_SERVICE_DISCOVERY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    data = json.load(handle)
+
+targets = data.get("targets")
+items = data.get("items")
+
+if not isinstance(targets, int) or isinstance(targets, bool) or targets < 0:
+    raise SystemExit(
+        "[FAIL] Service Discovery targets must be a non-negative integer"
+    )
+
+if not isinstance(items, list):
+    raise SystemExit(
+        "[FAIL] Service Discovery items must be an array"
+    )
+
+if len(items) != targets:
+    raise SystemExit(
+        "[FAIL] Service Discovery item count does not equal targets"
+    )
+
+for item in items:
+    if not isinstance(item, dict):
+        raise SystemExit(
+            "[FAIL] Service Discovery item is not an object"
+        )
+
+    if not isinstance(item.get("entity_id"), str):
+        raise SystemExit(
+            "[FAIL] Service Discovery item entity_id is invalid"
+        )
+
+    if not isinstance(item.get("address"), str):
+        raise SystemExit(
+            "[FAIL] Service Discovery item address is invalid"
+        )
+
+    for key in ("observed", "stale"):
+        value = item.get(key)
+        if (
+            not isinstance(value, int)
+            or isinstance(value, bool)
+            or value < 0
+        ):
+            raise SystemExit(
+                f"[FAIL] Service Discovery item {key} is invalid"
+            )
+
+    endpoints = item.get("endpoints")
+    if not isinstance(endpoints, list):
+        raise SystemExit(
+            "[FAIL] Service Discovery endpoints must be an array"
+        )
+
+    if len(endpoints) != item["observed"] + item["stale"]:
+        raise SystemExit(
+            "[FAIL] Service Discovery endpoint counts are inconsistent"
+        )
+
+print(
+    "[PASS] Service Discovery API="
+    f"{targets} targets, "
+    f"{sum(item['observed'] for item in items)} observed, "
+    f"{sum(item['stale'] for item in items)} stale"
+)
+PY_SERVICE_DISCOVERY
+
+pass "GET /api/v1/service-discovery"
+
 LIST="${TMP_DIR}/inventory.json"
 STATUS="$(http_request GET "${BASE_URL}/api/v1/inventory" "${LIST}")"
 [[ "${STATUS}" == "200" ]] || fail "Inventory list returned HTTP ${STATUS}"

@@ -93,6 +93,107 @@ if (
         "[FAIL] Service Discovery targets is not a non-negative integer"
     )
 
+endpoints = service_discovery.get("endpoints")
+
+if not isinstance(endpoints, dict):
+    raise SystemExit(
+        "[FAIL] Service Discovery endpoints summary missing"
+    )
+
+for state in ("observed", "stale"):
+    value = endpoints.get(state)
+
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or value < 0
+    ):
+        raise SystemExit(
+            "[FAIL] Service Discovery endpoint count is invalid: "
+            f"{state}"
+        )
+
+last_inspection = service_discovery.get("last_inspection")
+
+if (
+    last_inspection is not None
+    and not isinstance(last_inspection, str)
+):
+    raise SystemExit(
+        "[FAIL] Service Discovery last_inspection is invalid"
+    )
+
+retry_pool = service_discovery.get("retry_pool")
+
+if (
+    not isinstance(retry_pool, int)
+    or isinstance(retry_pool, bool)
+    or retry_pool < 0
+):
+    raise SystemExit(
+        "[FAIL] Service Discovery retry_pool is invalid"
+    )
+
+for timer_name in ("normal_timer", "retry_timer"):
+    timer = service_discovery.get(timer_name)
+
+    if not isinstance(timer, dict):
+        raise SystemExit(
+            f"[FAIL] Service Discovery {timer_name} missing"
+        )
+
+    if timer.get("state") not in (
+        "ACTIVE",
+        "INACTIVE",
+        "FAILED",
+        "ACTIVATING",
+        "DEACTIVATING",
+        "UNKNOWN",
+    ):
+        raise SystemExit(
+            f"[FAIL] Service Discovery {timer_name}.state invalid"
+        )
+
+    if timer.get("runtime") not in (
+        "RUNNING",
+        "WAITING",
+        "INACTIVE",
+        "UNKNOWN",
+    ):
+        raise SystemExit(
+            f"[FAIL] Service Discovery {timer_name}.runtime invalid"
+        )
+
+    if not isinstance(timer.get("enabled"), bool):
+        raise SystemExit(
+            f"[FAIL] Service Discovery {timer_name}.enabled invalid"
+        )
+
+    schedule = timer.get("schedule")
+    if schedule is not None and not isinstance(schedule, str):
+        raise SystemExit(
+            f"[FAIL] Service Discovery {timer_name}.schedule invalid"
+        )
+
+    last_trigger = timer.get("last_trigger")
+    if (
+        last_trigger is not None
+        and not isinstance(last_trigger, str)
+    ):
+        raise SystemExit(
+            f"[FAIL] Service Discovery {timer_name}.last_trigger invalid"
+        )
+
+    next_elapse = timer.get("next_elapse_monotonic")
+    if (
+        next_elapse is not None
+        and not isinstance(next_elapse, str)
+    ):
+        raise SystemExit(
+            f"[FAIL] Service Discovery "
+            f"{timer_name}.next_elapse_monotonic invalid"
+        )
+
 print(
     "[PASS] Service Discovery="
     f"{service_discovery['readiness']}, "

@@ -10,10 +10,6 @@ if str(APP_ROOT) not in sys.path:
 
 from core.status import status as legacy
 from core.service_discovery import service_discovery as service_discovery_core
-from core.service_discovery.orchestrate import (
-    resolve_provider as resolve_service_discovery_provider,
-)
-
 
 STATUS_SCHEMA_VERSION = 1
 
@@ -40,6 +36,82 @@ def _service_enabled(unit):
         result.returncode == 0
         and result.stdout.strip() == "enabled"
     )
+
+
+
+def _timer_policy(unit):
+    value = legacy.service_property(
+        unit,
+        "TimersMonotonic",
+    )
+
+    if not value:
+        return None
+
+    marker = "OnUnitInactiveUSec="
+
+    for line in value.splitlines():
+        if marker not in line:
+            continue
+
+        policy = line.split(marker, 1)[1]
+        policy = policy.split(";", 1)[0].strip()
+
+        if policy:
+            return policy
+
+    return None
+
+
+def _timer_status(unit):
+    active_state = legacy.service_property(
+        unit,
+        "ActiveState",
+    )
+    sub_state = legacy.service_property(
+        unit,
+        "SubState",
+    )
+    unit_file_state = legacy.service_property(
+        unit,
+        "UnitFileState",
+    )
+
+    if active_state == "active" and sub_state == "running":
+        runtime = "RUNNING"
+    elif active_state == "active" and sub_state == "waiting":
+        runtime = "WAITING"
+    elif active_state == "inactive":
+        runtime = "INACTIVE"
+    else:
+        runtime = "UNKNOWN"
+
+    last_trigger = legacy.service_property(
+        unit,
+        "LastTriggerUSec",
+    )
+    next_elapse_monotonic = legacy.service_property(
+        unit,
+        "NextElapseUSecMonotonic",
+    )
+
+    return {
+        "state": (
+            active_state.upper()
+            if active_state
+            else "UNKNOWN"
+        ),
+        "runtime": runtime,
+        "enabled": unit_file_state == "enabled",
+        "schedule": _timer_policy(unit),
+        "last_trigger": last_trigger or None,
+        "next_elapse_monotonic": (
+            None
+            if not next_elapse_monotonic
+            or next_elapse_monotonic == "infinity"
+            else next_elapse_monotonic
+        ),
+    }
 
 
 def build_status(
@@ -129,6 +201,28 @@ def build_status(
             "readiness": "N/A",
             "provider": "N/A",
             "targets": None,
+            "endpoints": {
+                "observed": None,
+                "stale": None,
+            },
+            "last_inspection": None,
+            "retry_pool": None,
+            "normal_timer": {
+                "state": "UNKNOWN",
+                "runtime": "UNKNOWN",
+                "enabled": None,
+                "schedule": None,
+                "last_trigger": None,
+                "next_elapse_monotonic": None,
+            },
+            "retry_timer": {
+                "state": "UNKNOWN",
+                "runtime": "UNKNOWN",
+                "enabled": None,
+                "schedule": None,
+                "last_trigger": None,
+                "next_elapse_monotonic": None,
+            },
         }
         payload["monitoring"] = {
             "scheduler": "N/A",
@@ -462,143 +556,132 @@ def build_status(
     # ------------------------------------------------------------
 
     try:
-        service_discovery_provider = (
-            resolve_service_discovery_provider()
+        service_discovery_status = (
+            service_discovery_core.service_discovery_status(
+                legacy.DATABASE
+            )
         )
+
         service_discovery_targets = (
             service_discovery_core.service_discovery_targets(
                 legacy.DATABASE
             )
         )
+
+        connection = (
+            service_discovery_core.connect_read_only(
+                legacy.DATABASE
+            )
+        )
+
+        try:
+            retry_pool = (
+                service_discovery_core.service_discovery_retry_pool(
+                    connection,
+                    service_discovery_targets,
+                )
+            )
+        finally:
+            connection.close()
+
+        normal_timer = _timer_status(
+            legacy.SERVICE_DISCOVERY_TIMER
+        )
+
+        retry_timer = _timer_status(
+            legacy.SERVICE_DISCOVERY_RETRY_TIMER
+        )
+
     except Exception:
         payload["service_discovery"] = {
             "readiness": "UNAVAILABLE",
             "provider": "UNKNOWN",
             "targets": None,
+            "endpoints": {
+                "observed": None,
+                "stale": None,
+            },
+            "last_inspection": None,
+            "retry_pool": None,
+            "normal_timer": {
+                "state": "UNKNOWN",
+                "runtime": "UNKNOWN",
+                "enabled": None,
+                "schedule": None,
+                "last_trigger": None,
+                "next_elapse_monotonic": None,
+            },
+            "retry_timer": {
+                "state": "UNKNOWN",
+                "runtime": "UNKNOWN",
+                "enabled": None,
+                "schedule": None,
+                "last_trigger": None,
+                "next_elapse_monotonic": None,
+            },
         }
         fail()
     else:
         payload["service_discovery"] = {
             "readiness": "READY",
-            "provider": service_discovery_provider,
-            "targets": len(service_discovery_targets),
+            "provider": service_discovery_status["provider"],
+            "targets": service_discovery_status["targets"],
+            "endpoints": service_discovery_status["endpoints"],
+            "last_inspection": (
+                service_discovery_status["last_inspection"]
+            ),
+            "retry_pool": len(retry_pool),
+            "normal_timer": normal_timer,
+            "retry_timer": retry_timer,
         }
 
     # ------------------------------------------------------------
     # Monitoring
     # ------------------------------------------------------------
 
-    monitoring_timer_active = (
-        legacy.service_property(
-            legacy.MONITORING_TIMER,
-            "ActiveState",
-        ) == "active"
-    )
-
-    monitoring_timer_enabled = (
-        legacy.service_property(
-            legacy.MONITORING_TIMER,
-            "UnitFileState",
-        ) == "enabled"
-    )
-
-    if monitoring_timer_active:
+    if simulation is not None:
+        # Simulations must be deterministic.  Unrelated simulated
+        # subsystems must not inherit transient live Monitoring state.
         payload["monitoring"]["scheduler"] = "ACTIVE"
-    else:
-        payload["monitoring"]["scheduler"] = "INACTIVE"
-        fail()
-
-    if monitoring_timer_enabled:
         payload["monitoring"]["schedule"] = "ENABLED"
-    else:
-        payload["monitoring"]["schedule"] = "DISABLED"
-        fail()
+        payload["monitoring"]["reconciliation"] = "HEALTHY"
+        payload["monitoring"]["provider"] = "prometheus"
 
-    reconciliation_timer_active = (
-        legacy.service_property(
-            legacy.MONITORING_RECONCILE_TIMER,
-            "ActiveState",
-        ) == "active"
-    )
+        collection = "HEALTHY"
+        if simulation == "monitoring-collection-failed":
+            collection = "FAILED"
 
-    reconciliation_timer_enabled = (
-        legacy.service_property(
-            legacy.MONITORING_RECONCILE_TIMER,
-            "UnitFileState",
-        ) == "enabled"
-    )
+        payload["monitoring"]["collection"] = collection
 
-    reconciliation_health = legacy.oneshot_health(
-        legacy.MONITORING_RECONCILE_UNIT
-    )
+        if collection not in {
+            "HEALTHY",
+            "IN PROGRESS",
+        }:
+            fail()
 
-    if not (
-        reconciliation_timer_active
-        and reconciliation_timer_enabled
-    ):
-        reconciliation_health = "FAILED"
-
-    payload["monitoring"]["reconciliation"] = (
-        reconciliation_health
-    )
-
-    if reconciliation_health not in {
-        "HEALTHY",
-        "IN PROGRESS",
-    }:
-        fail()
-
-    provider = legacy.monitoring_provider_status()
-
-    if provider is None:
-        payload["monitoring"]["provider"] = "UNKNOWN"
-        fail()
-    else:
-        payload["monitoring"]["provider"] = provider
-
-    collection = legacy.oneshot_health(
-        legacy.MONITORING_UNIT
-    )
-
-    if simulation == "monitoring-collection-failed":
-        collection = "FAILED"
-
-    payload["monitoring"]["collection"] = collection
-
-    if collection not in {
-        "HEALTHY",
-        "IN PROGRESS",
-    }:
-        fail()
-
-    monitoring_health = legacy.monitoring_health_status()
-
-    if simulation == "monitoring-entities-down":
         monitoring_health = {
             "counts": {
-                "HEALTHY": 1,
+                "HEALTHY": 3,
                 "DEGRADED": 0,
-                "DOWN": 2,
+                "DOWN": 0,
                 "UNKNOWN": 0,
             },
             "targets": 3,
             "freshness": "FRESH",
         }
 
-    if monitoring_health is None:
-        payload["monitoring"].update({
-            "evidence": "UNKNOWN",
-            "targets": None,
-            "entities": {
-                "healthy": None,
-                "degraded": None,
-                "down": None,
-                "unknown": None,
-            },
-        })
-        fail()
+        if simulation == "monitoring-entities-down":
+            monitoring_health = {
+                "counts": {
+                    "HEALTHY": 1,
+                    "DEGRADED": 0,
+                    "DOWN": 2,
+                    "UNKNOWN": 0,
+                },
+                "targets": 3,
+                "freshness": "FRESH",
+            }
 
-    else:
         evidence = monitoring_health["freshness"]
 
         if simulation == "monitoring-evidence-stale":
@@ -621,6 +704,123 @@ def build_status(
             "down": counts["DOWN"],
             "unknown": counts["UNKNOWN"],
         }
+
+    else:
+        monitoring_timer_active = (
+            legacy.service_property(
+                legacy.MONITORING_TIMER,
+                "ActiveState",
+            ) == "active"
+        )
+
+        monitoring_timer_enabled = (
+            legacy.service_property(
+                legacy.MONITORING_TIMER,
+                "UnitFileState",
+            ) == "enabled"
+        )
+
+        if monitoring_timer_active:
+            payload["monitoring"]["scheduler"] = "ACTIVE"
+        else:
+            payload["monitoring"]["scheduler"] = "INACTIVE"
+            fail()
+
+        if monitoring_timer_enabled:
+            payload["monitoring"]["schedule"] = "ENABLED"
+        else:
+            payload["monitoring"]["schedule"] = "DISABLED"
+            fail()
+
+        reconciliation_timer_active = (
+            legacy.service_property(
+                legacy.MONITORING_RECONCILE_TIMER,
+                "ActiveState",
+            ) == "active"
+        )
+
+        reconciliation_timer_enabled = (
+            legacy.service_property(
+                legacy.MONITORING_RECONCILE_TIMER,
+                "UnitFileState",
+            ) == "enabled"
+        )
+
+        reconciliation_health = legacy.oneshot_health(
+            legacy.MONITORING_RECONCILE_UNIT
+        )
+
+        if not (
+            reconciliation_timer_active
+            and reconciliation_timer_enabled
+        ):
+            reconciliation_health = "FAILED"
+
+        payload["monitoring"]["reconciliation"] = (
+            reconciliation_health
+        )
+
+        if reconciliation_health not in {
+            "HEALTHY",
+            "IN PROGRESS",
+        }:
+            fail()
+
+        provider = legacy.monitoring_provider_status()
+
+        if provider is None:
+            payload["monitoring"]["provider"] = "UNKNOWN"
+            fail()
+        else:
+            payload["monitoring"]["provider"] = provider
+
+        collection = legacy.oneshot_health(
+            legacy.MONITORING_UNIT
+        )
+
+        payload["monitoring"]["collection"] = collection
+
+        if collection not in {
+            "HEALTHY",
+            "IN PROGRESS",
+        }:
+            fail()
+
+        monitoring_health = legacy.monitoring_health_status()
+
+        if monitoring_health is None:
+            payload["monitoring"].update({
+                "evidence": "UNKNOWN",
+                "targets": None,
+                "entities": {
+                    "healthy": None,
+                    "degraded": None,
+                    "down": None,
+                    "unknown": None,
+                },
+            })
+            fail()
+
+        else:
+            evidence = monitoring_health["freshness"]
+
+            payload["monitoring"]["evidence"] = evidence
+
+            if evidence != "FRESH":
+                fail()
+
+            counts = monitoring_health["counts"]
+
+            payload["monitoring"]["targets"] = (
+                monitoring_health["targets"]
+            )
+
+            payload["monitoring"]["entities"] = {
+                "healthy": counts["HEALTHY"],
+                "degraded": counts["DEGRADED"],
+                "down": counts["DOWN"],
+                "unknown": counts["UNKNOWN"],
+            }
 
     # ------------------------------------------------------------
     # Verification

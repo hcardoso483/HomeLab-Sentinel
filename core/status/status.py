@@ -27,6 +27,11 @@ VERIFY_TIMER = "homelab-sentinel-verify.timer"
 DISCOVERY_UNIT = "homelab-sentinel-discovery.service"
 DISCOVERY_RECONCILER = APP_ROOT / "core/discovery/reconcile.py"
 
+SERVICE_DISCOVERY_TIMER = "homelab-sentinel-service-discovery.timer"
+SERVICE_DISCOVERY_RETRY_TIMER = (
+    "homelab-sentinel-service-discovery-retry.timer"
+)
+
 MONITORING_CORE = APP_ROOT / "core/monitoring/monitoring.py"
 MONITORING_EVALUATOR = APP_ROOT / "core/monitoring/evaluate.py"
 MONITORING_UNIT = "homelab-sentinel-monitoring.service"

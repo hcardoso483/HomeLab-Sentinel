@@ -43,21 +43,45 @@
 
 - Service Discovery:
     - Service Discovery Engine:
+        id: sentinel-service-discovery
         description: Sentinel service discovery readiness
-        widget:
-          type: customapi
-          url: http://172.18.0.1:18080/api/v1/status
-          refreshInterval: 10000
-          mappings:
-            - field: service_discovery.readiness
-              label: Readiness
-              format: text
-            - field: service_discovery.provider
-              label: Provider
-              format: text
-            - field: service_discovery.targets
-              label: Targets
-              format: number
+        widgets:
+          - type: customapi
+            url: http://172.18.0.1:18080/api/v1/status
+            refreshInterval: 10000
+            mappings:
+              - field: service_discovery.readiness
+                label: Readiness
+                format: text
+              - field: service_discovery.targets
+                label: Targets
+                format: number
+              - field: service_discovery.endpoints.observed
+                label: Observed
+                format: number
+              - field: service_discovery.endpoints.stale
+                label: Stale
+                format: number
+              - field: service_discovery.retry_pool
+                label: Retry Pool
+                format: number
+              - field: service_discovery.normal_timer.runtime
+                label: Sweep
+                format: text
+              - field: service_discovery.retry_timer.runtime
+                label: Retry
+                format: text
+              - field: service_discovery.provider
+                label: Provider
+                format: text
+
+          - type: customapi
+            url: http://172.18.0.1:18080/api/v1/service-discovery
+            refreshInterval: 10000
+            mappings:
+              - field: targets
+                label: Detail Targets
+                format: number
 
 - Monitoring:
     - Monitoring Engine:
