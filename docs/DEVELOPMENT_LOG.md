@@ -148,20 +148,91 @@ This checkpoint represents the completed Monitoring v1 foundation. Further monit
 
 ---
 
+## 2026-09-03 - Service Discovery v1 Complete
+
+### Objective
+
+Extend HomeLab Sentinel from device discovery into provider-neutral service and endpoint discovery while preserving Sentinel-owned identity, persistence, history, and operational semantics.
+
+### Completed
+
+- Defined the Service Discovery contract and architectural boundary.
+- Implemented canonical Service Discovery targets derived from Living Inventory.
+- Added provider-neutral Service Discovery orchestration.
+- Added nmap as the current Service Discovery provider.
+- Implemented endpoint and open-port observation.
+- Added canonical service observation validation.
+- Implemented persistent Service Discovery run and endpoint state.
+- Defined current-state and historical semantics.
+- Implemented `OBSERVED` and `STALE` endpoint state handling.
+- Preserved previous positive evidence when an inspection is inconclusive.
+- Added bounded multi-stage inspection behavior.
+- Added a retry pool for targets requiring deeper inspection.
+- Added automatic normal-sweep and retry scheduling.
+- Serialized Service Discovery with other inventory-sensitive Sentinel operations through the shared runtime lock.
+- Added Service Discovery CLI surfaces for:
+  - status
+  - services
+  - history
+- Integrated Service Discovery into canonical platform status.
+- Added a read-only Service Discovery Core API representation.
+- Added per-target Service Discovery results to Homepage through the restricted server-side API bridge.
+- Kept Homepage presentation-only, with no direct access to Sentinel persistence, systemd, or provider control.
+- Added deterministic regression coverage for Service Discovery persistence, status, CLI, API, and orchestration behavior.
+- Completed real-homelab validation against canonical Living Inventory targets.
+- Completed autonomous restart and reboot recovery proof.
+
+### Validation
+
+The final real-homelab and reboot proof confirmed:
+
+- Service Discovery operated against real Living Inventory targets.
+- Successful endpoint evidence persisted as canonical Sentinel state.
+- Current and historical Service Discovery semantics remained intact.
+- Inconclusive inspections did not incorrectly erase previous positive evidence.
+- Retry processing recovered targets that required additional inspection.
+- Sentinel returned to `READY` automatically after reboot.
+- Service Discovery scheduling resumed automatically.
+- The normal sweep and retry timers re-armed without manual intervention.
+- Fresh Service Discovery evidence was produced after reboot.
+- Core API and Inventory returned healthy.
+- Monitoring returned healthy with fresh evidence.
+- Homepage recovered automatically and repopulated from Sentinel state.
+- Prometheus, Blackbox Exporter, and Homepage containers returned healthy.
+- Post-boot verification executed automatically and passed.
+- No manual service or container restart was required for recovery.
+
+### Result
+
+Service Discovery v1 is considered complete.
+
+Project checkpoint:
+
+```text
+aff7d0f complete service discovery status and orchestration integration
+```
+
+This checkpoint represents the completed Service Discovery v1 foundation, including persistence, current and historical state, CLI and API exposure, orchestration, real-homelab validation, and autonomous reboot recovery.
+
+Further Service Discovery refinement belongs to later development unless operational experience reveals a defect or a future capability requires extending the Service Discovery contract.
+
+---
+
 ## Current Direction
 
 HomeLab Sentinel has now established working foundations for:
 
 - Modular provider architecture
 - Deployment lifecycle
-- Automatic discovery
+- Automatic network discovery
 - Persistent identity
 - Living Inventory
-- Platform readiness
-- Core API and status
+- Platform readiness and post-boot verification
+- Core API and canonical platform status
 - Monitoring v1
-- Initial read-only dashboard integration
+- Service Discovery v1
+- Read-only dashboard integration through the Sentinel API boundary
 
-The next development phase should be selected from the original HomeLab Sentinel v1 goals.
+The next development phase should continue with the remaining HomeLab Sentinel v1 capability areas.
 
-The current priority is to make remaining v1 capabilities operational and useful before investing in refinement intended for HomeLab Sentinel v2.
+The current priority remains making v1 capabilities operational, provider-neutral, testable, and useful against the real homelab before investing in refinement intended for HomeLab Sentinel v2.

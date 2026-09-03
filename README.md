@@ -6,7 +6,7 @@ HomeLab Sentinel is an open-source, self-hosted platform designed to discover, u
 
 Rather than replacing proven open-source monitoring and infrastructure tools, HomeLab Sentinel integrates them behind a Sentinel-owned core that maintains infrastructure identity and state, coordinates providers, and exposes a consistent view of the homelab.
 
-The project is currently in **alpha development**. Core platform foundations, automatic network discovery, Living Inventory, persistent device identity, Monitoring v1, boot verification, and initial dashboard integration are operational and have been tested against a real homelab.
+The project is currently in **alpha development**. Core platform foundations, automatic network discovery, Living Inventory, persistent device identity, Monitoring v1, Service Discovery v1, boot verification, and read-only dashboard integration are operational and have been tested against a real homelab.
 
 ---
 
@@ -16,7 +16,7 @@ The project is currently in **alpha development**. Core platform foundations, au
 
 HomeLab Sentinel has progressed from architectural foundations into an operational platform.
 
-The current implementation can automatically discover devices, correlate observations into persistent identities, maintain a Living Inventory, derive monitoring targets, collect real reachability evidence through Prometheus and Blackbox Exporter, evaluate canonical device health, preserve monitoring history, recover automatically after reboot, and expose canonical platform status through the Sentinel CLI and Core API.
+The current implementation can automatically discover devices, correlate observations into persistent identities, maintain a Living Inventory, derive monitoring and Service Discovery targets, collect real reachability evidence through Prometheus and Blackbox Exporter, discover network endpoints through provider-neutral Service Discovery, evaluate canonical device health, preserve monitoring and Service Discovery history, recover automatically after reboot, and expose canonical platform status through the Sentinel CLI and Core API.
 
 ### Implemented Platform Foundations
 
@@ -104,6 +104,38 @@ Monitoring v1 reached its completed project checkpoint at commit:
 15bd0a9 Add Monitoring history CLI
 ```
 
+### Service Discovery v1 — Complete
+
+Service Discovery v1 is implemented, regression-tested, real-homelab tested, and reboot-proven.
+
+Current capabilities include:
+
+- Canonical targets derived from Living Inventory
+- Provider-neutral Service Discovery orchestration
+- nmap as the current Service Discovery provider
+- Endpoint and open-port observation
+- Canonical observation validation
+- Persistent current and historical Service Discovery state
+- `OBSERVED` and `STALE` endpoint semantics
+- Preservation of previous positive evidence when an inspection is inconclusive
+- Bounded multi-stage inspection and retry processing
+- Automatic normal-sweep and retry scheduling
+- Shared runtime locking with inventory-sensitive Sentinel operations
+- CLI surfaces for status, services, and history
+- Canonical platform-status and read-only Core API integration
+- Per-target Homepage presentation through the restricted server-side API bridge
+- Autonomous restart and reboot recovery
+
+Endpoint evidence remains distinct from higher-level service or infrastructure classification. An open port alone is not treated as proof of a particular application or device function.
+
+Service Discovery v1 reached its implementation checkpoint at commit:
+
+```text
+aff7d0f complete service discovery status and orchestration integration
+```
+
+Subsequent real-homelab and reboot validation confirmed autonomous recovery, scheduling, persistence, fresh evidence, and post-boot verification without manual service or container restarts.
+
 ### Platform Status and Self-Verification
 
 HomeLab Sentinel also provides operational self-status and boot verification.
@@ -136,7 +168,8 @@ Implemented integration includes:
 - Container health checking
 - Sentinel status presentation
 - Read-only access to canonical Sentinel status
-- A restricted API bridge between Homepage and the loopback-bound Sentinel Core API
+- Per-target Service Discovery presentation
+- A restricted server-side API bridge between Homepage and the loopback-bound Sentinel Core API
 
 Homepage is a presentation layer. It does not calculate authoritative Sentinel health and does not query monitoring providers directly for Sentinel-owned meaning.
 
@@ -149,7 +182,7 @@ Current provider/module work includes:
 - **Prometheus** — monitoring provider
 - **Blackbox Exporter** — internal reachability probe dependency used by the Prometheus monitoring implementation
 - **Homepage** — dashboard/presentation provider
-- **nmap** — current network discovery provider
+- **nmap** — current network discovery and Service Discovery provider
 
 Provider-specific implementation is kept behind Sentinel contracts wherever practical so that the Core remains responsible for orchestration and authoritative state rather than provider-specific behavior.
 
@@ -158,7 +191,7 @@ Provider-specific implementation is kept behind Sentinel contracts wherever prac
 Major v1 areas that remain include:
 
 - Deeper device understanding and classification
-- Service and open-port discovery
+- Higher-level service understanding and classification
 - Host and infrastructure resource monitoring
 - Container and virtual-machine monitoring
 - Broader historical metrics
@@ -264,33 +297,38 @@ Sentinel Core
       +----> Identity Correlation
       |
       +----> Living Inventory
-      |
-      v
-Monitoring Target Derivation
-      |
-      v
-Provider Resolver
-      |
-      v
-Monitoring Provider
-      |
-      v
-Provider Evidence
-      |
-      v
-Monitoring Adapter
-      |
-      v
-Canonical Monitoring Observations
-      |
-      v
-Sentinel Health Evaluation
-      |
-      v
-Core API / CLI
-      |
-      v
-Presentation Layer
+               |
+        +------+------+
+        |             |
+        v             v
+ Monitoring Targets  Service Discovery Targets
+        |             |
+        v             v
+ Provider Resolver   Provider Resolver
+        |             |
+        v             v
+ Monitoring Provider Service Discovery Provider
+        |             |
+        v             v
+ Provider Evidence   Endpoint Evidence
+        |             |
+        v             v
+ Monitoring Adapter  Validation / Persistence
+        |             |
+        v             v
+ Canonical Monitoring Current Service State
+ Observations         + Service History
+        |
+        v
+ Sentinel Health Evaluation
+        |
+        +------+------+
+               |
+               v
+          Core API / CLI
+               |
+               v
+       Presentation Layer
 ```
 
 Provider selection and deployment remain capability-driven.
@@ -340,6 +378,7 @@ Current responsibilities include:
 - Provider resolution
 - Monitoring orchestration
 - Monitoring health evaluation
+- Service Discovery orchestration and state
 - Platform status
 - Boot readiness
 - Core API
@@ -399,6 +438,12 @@ Monitoring consumes canonical Living Inventory targets and provider evidence.
 
 Providers perform monitoring work, while Sentinel owns normalized observations, persistence, freshness rules, health evaluation, and canonical health state.
 
+### Service Discovery
+
+Service Discovery consumes canonical Living Inventory targets and provider observations.
+
+Providers perform endpoint inspection, while Sentinel owns validation, persistence, current and historical state, retry semantics, scheduling, and the meaning exposed through CLI, Core API, and presentation layers.
+
 ### Core API and CLI
 
 Canonical Sentinel state is exposed through stable Core interfaces rather than requiring presentation layers to inspect internal databases, systemd state, provider APIs, or runtime files directly.
@@ -413,17 +458,21 @@ Homepage currently provides the first read-only Sentinel status integration.
 
 ## Planned v1 Capabilities
 
-### Service Discovery
+### Service Understanding and Classification
 
-Planned capabilities include:
+Service Discovery v1 already provides canonical endpoint and open-port evidence.
 
-- Open port detection
-- Service identification
+Remaining higher-level capabilities include:
+
+- Trusted service identification beyond raw endpoint evidence
 - Docker host detection
 - Proxmox detection
 - NAS detection
 - Home Assistant detection
 - Web application discovery
+- Infrastructure role and function classification
+
+These capabilities should build on canonical Service Discovery evidence and Living Inventory identity rather than treating an open port alone as proof of a particular application or device role.
 
 ### Infrastructure Monitoring
 
@@ -495,6 +544,7 @@ HomeLab-Sentinel/
 │   ├── monitoring/
 │   ├── pipeline/
 │   ├── resolver/
+│   ├── service_discovery/
 │   └── status/
 ├── docs/
 ├── installer/
@@ -526,6 +576,7 @@ Important documents include:
 - `docs/DISCOVERY_CONTRACT.md` — Discovery responsibility and observation contract
 - `docs/LIVING_INVENTORY.md` — Living Inventory behavior
 - `docs/PERSISTENT_IDENTITY_CONTRACT.md` — persistent infrastructure identity semantics
+- `docs/SERVICE_DISCOVERY_CONTRACT.md` — canonical Service Discovery responsibility and state contract
 - `docs/MONITORING_CONTRACT.md` — canonical Monitoring v1 contract
 - `docs/MONITORING_ORCHESTRATION_CONTRACT.md` — provider-neutral Monitoring orchestration
 - `docs/MONITORING_PROVIDER_ADAPTER.md` — monitoring provider adapter boundary

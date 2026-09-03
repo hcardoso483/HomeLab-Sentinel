@@ -154,6 +154,33 @@ The Living Inventory is the authoritative source for infrastructure entities con
 
 ---
 
+## Service Discovery
+
+Service Discovery v1 consumes canonical targets derived from the Living Inventory and produces Sentinel-owned endpoint evidence.
+
+The current Service Discovery architecture provides:
+
+- Provider-neutral orchestration
+- nmap as the current provider
+- Endpoint and open-port observation
+- Persistent current and historical state
+- `OBSERVED` and `STALE` endpoint semantics
+- Preservation of previous positive evidence when an inspection is inconclusive
+- Bounded multi-stage inspection
+- Retry processing for targets requiring deeper inspection
+- Automatic normal-sweep and retry scheduling
+- CLI, Core API, and read-only presentation exposure
+
+Service Discovery shares the Sentinel runtime lock where required with other inventory-sensitive operations.
+
+Homepage consumes Service Discovery state only through the restricted server-side Core API bridge. It does not directly inspect Service Discovery persistence, systemd state, or provider output.
+
+Service Discovery v1 has been regression-tested, validated against the real homelab, and reboot-proven.
+
+Higher-level service classification and infrastructure role detection remain future capabilities. Endpoint evidence alone must not be treated as proof of application or device function.
+
+---
+
 ## Provider Registry and Resolver
 
 The Registry exposes registered capabilities, providers, metadata, and provider entrypoints.
@@ -388,7 +415,7 @@ Alerting should consume canonical Sentinel state and events rather than independ
 | Monitoring v1 | Sentinel Core | ✅ Complete |
 | Monitoring Provider | Prometheus | ✅ Operational |
 | Reachability Probe | Blackbox Exporter | ✅ Operational |
-| Service Discovery | TBD | ⏳ Planned |
+| Service Discovery v1 | Sentinel Core + nmap provider | ✅ Complete |
 | Host Resource Monitoring | TBD | ⏳ Planned |
 | Container Monitoring | TBD | ⏳ Planned |
 | Virtual Machine Monitoring | TBD | ⏳ Planned |
@@ -426,44 +453,51 @@ Identity Correlation
    v
 Living Inventory
    |
-   v
-Monitoring Target Derivation
-   |
-   v
-Provider Resolver
-   |
-   v
-Prometheus Target Reconciliation
-   |
-   v
-Prometheus
-   |
-   v
-Blackbox Exporter
-   |
-   v
-Reachability Evidence
-   |
-   v
-Prometheus Monitoring Adapter
-   |
-   v
-Canonical Monitoring Observations
-   |
-   +------> Monitoring History
-   |
-   v
-Health Evaluation
-   |
-   v
-Canonical Platform Status
-   |
-   +------> hls CLI
-   |
-   +------> Core API
-                 |
-                 v
-              Homepage
+   +-------------------------------+
+   |                               |
+   v                               v
+Monitoring Target Derivation    Service Discovery Targets
+   |                               |
+   v                               v
+Provider Resolver               Provider Resolver
+   |                               |
+   v                               v
+Prometheus Target              nmap Service Inspection
+Reconciliation                    |
+   |                               v
+   v                            Endpoint Evidence
+Prometheus                         |
+   |                               v
+   v                            Validation
+Blackbox Exporter                  |
+   |                               v
+   v                            Persistent Service State
+Reachability Evidence              |
+   |                               +------> Service History
+   v                               |
+Prometheus Monitoring Adapter      v
+   |                            Current Service State
+   v                               |
+Canonical Monitoring              |
+Observations                       |
+   |                               |
+   +------> Monitoring History     |
+   |                               |
+   v                               |
+Health Evaluation                  |
+   |                               |
+   +---------------+---------------+
+                   |
+                   v
+          Canonical Platform Status
+                   |
+          +--------+--------+
+          |                 |
+          v                 v
+        hls CLI          Core API
+                            |
+                            v
+                         Homepage
 ```
 
 This flow has been exercised against the real homelab and has demonstrated autonomous recovery after reboot.
@@ -472,19 +506,23 @@ This flow has been exercised against the real homelab and has demonstrated auton
 
 # Planned v1 Capability Areas
 
-The original project direction still includes several capabilities that are not yet implemented.
+Service Discovery v1 and Monitoring v1 now provide operational foundations. The original project direction still includes additional v1 capabilities that are not yet implemented.
 
-## Service Discovery
+## Service Understanding and Classification
 
-Planned areas include:
+Service Discovery v1 already provides canonical endpoint and open-port evidence.
 
-- Open port detection
-- Service identification
+Remaining higher-level areas include:
+
+- Trusted service identification beyond raw endpoint evidence
 - Docker host detection
 - Proxmox detection
 - NAS detection
 - Home Assistant detection
 - Web application discovery
+- Infrastructure role and function classification
+
+These capabilities must build on canonical Service Discovery evidence and Living Inventory identity rather than treating an open port alone as proof of a particular application or device role.
 
 ## Infrastructure Monitoring
 
